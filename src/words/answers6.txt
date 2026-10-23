@@ -1444,7 +1444,6 @@ facing
 factor
 fading
 faerie
-faggot
 failed
 faints
 fairer
@@ -2751,8 +2750,6 @@ niches
 nicked
 nickel
 nieces
-niggas
-nigger
 nights
 nimble
 nimbus
