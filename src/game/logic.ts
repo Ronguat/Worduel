@@ -81,9 +81,20 @@ export function boardTurn(match: Match, i: number): string | null {
 }
 
 /** Whether `uid` may type a guess on board `i` right now. */
+/**
+ * Face-off: once the result is settled, the loser may keep guessing their word (or reveal it).
+ * Those guesses never change the result.
+ */
+export function isPlayingOn(match: Match, board: BoardState | undefined) {
+  return (
+    !!board && match.mode === 'faceoff' && match.status === 'finished' && match.endReason === 'solved' && !!board.a && isOpen(board)
+  )
+}
+
 export function canGuessOn(match: Match, uid: string, i: number) {
   const board = match.boards[i]
-  if (!board || match.status !== 'active' || !match.players.includes(uid) || !isOpen(board)) return false
+  if (!board || !match.players.includes(uid) || !isOpen(board)) return false
+  if (match.status !== 'active') return isPlayingOn(match, board) && board.guesser === uid
   if (match.mode === 'duel') return boardTurn(match, i) === uid
   if (match.mode === 'faceoff') return board.guesser === uid && !!board.a
   return true
@@ -145,7 +156,8 @@ export function applyGuesses(
   isValidWord: (w: string) => boolean,
   now: number,
 ): ApplyResult {
-  if (match.status !== 'active') return { ok: false, error: 'This match is over' }
+  const playingOn = match.status !== 'active' && entries.every((e) => isPlayingOn(match, match.boards[e.board]))
+  if (match.status !== 'active' && !playingOn) return { ok: false, error: 'This match is over' }
   if (!match.players.includes(uid)) return { ok: false, error: "You're not in this match" }
   if (entries.length === 0) return { ok: false, error: 'Make at least one guess' }
   if (new Set(entries.map((e) => e.board)).size !== entries.length) {
@@ -184,7 +196,7 @@ export function applyGuesses(
       next.winner = duelWinner(next)
     }
   } else if (match.mode === 'faceoff') {
-    const out = faceoffOutcome(next)
+    const out = playingOn ? null : faceoffOutcome(next)
     if (out) {
       next = { ...next, status: 'finished', endReason: 'solved', winner: out.winner, result: out.draw ? 'draw' : null }
     }
@@ -207,6 +219,14 @@ export function setFaceoffWord(match: Match, uid: string, word: string, isValidW
   if (word.length !== match.length) return { ok: false, error: 'Not enough letters' }
   if (!isValidWord(word)) return { ok: false, error: `${word.toUpperCase()} is not in the word list` }
   const boards = match.boards.map((b, j) => (j === i ? { ...b, a: encodeAnswer(word) } : b))
+  return { ok: true, match: { ...match, boards, updatedAt: now, lastMove: { by: uid, at: now } } }
+}
+
+/** Face-off: after losing, stop playing on and reveal your word. */
+export function revealFaceoffWord(match: Match, uid: string, now: number): ApplyResult {
+  const i = match.boards.findIndex((b) => b.guesser === uid)
+  if (i < 0 || !isPlayingOn(match, match.boards[i])) return { ok: false, error: 'Nothing to reveal' }
+  const boards = match.boards.map((b, j) => (j === i ? { ...b, failed: true } : b))
   return { ok: true, match: { ...match, boards, updatedAt: now, lastMove: { by: uid, at: now } } }
 }
 

@@ -1,11 +1,12 @@
 import type { User } from 'firebase/auth'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createMatch, deleteMatch, joinMatch, pickFaceoffWord, resignMatch, submitGuesses } from '../game/actions'
+import { createMatch, deleteMatch, joinMatch, pickFaceoffWord, resignMatch, revealWord, submitGuesses } from '../game/actions'
 import {
   canGuessOn,
   decodeAnswer,
   faceoffBoards,
   hardModeViolation,
+  isPlayingOn,
   isOpen,
   keyboardStatus,
   needsMe,
@@ -96,6 +97,8 @@ function Game({
   const myTurn = needsMe(match, me)
   const typeable = match.boards.map((_, i) => canGuessOn(match, me, i))
   const typeableKey = typeable.join(',')
+  // face-off: the result is settled but you're still allowed to finish your word
+  const myPlayOn = isPlayer && !!fo?.mine && isPlayingOn(match, fo.mine)
   // In face-off your own board comes first.
   const boardOrder = match.boards.map((_, i) => i)
   if (fo?.mine && match.boards.indexOf(fo.mine) === 1) boardOrder.reverse()
@@ -190,7 +193,8 @@ function Game({
   }
 
   const onKey = (key: string) => {
-    if (!active || !isPlayer || busy) return
+    if (!isPlayer || busy) return
+    if (!active && !typeable.some(Boolean)) return
     if (mustPick) {
       if (key === 'Backspace') setPick(pick.slice(0, -1))
       else if (key === 'Enter') void commitPick(pick)
@@ -328,7 +332,16 @@ function Game({
   if (match.status === 'waiting') {
     banner = isPlayer ? 'Waiting for your friend to join' : `${nameOf(match.createdBy)} invited you`
   } else if (match.status === 'finished' && !revealing) {
-    banner = resultText(match, me, nameOf)
+    let sub = ''
+    if (myPlayOn) sub = "You can keep guessing to finish the word, or reveal it."
+    else if (fo?.theirs && isPlayingOn(match, fo.theirs)) sub = `${nameOf(opp)} can still keep guessing your word`
+    banner = (
+      <>
+        {resultText(match, me, nameOf)}
+        {faceoff && match.endReason !== 'resigned' && <span className="sub">{faceoffScore(match, me, nameOf)}</span>}
+        {sub && <span className="sub">{sub}</span>}
+      </>
+    )
   } else if (match.mode === 'duel') {
     const score = multi && opp ? `You ${solvedBy(me)} · ${nameOf(opp)} ${solvedBy(opp)}` : null
     const myBoards = typeable.filter(Boolean).length
@@ -487,7 +500,7 @@ function Game({
           </div>
         ))}
 
-      {active && isPlayer && (
+      {(active || myPlayOn) && isPlayer && (
         <>
           {mustPick && (
             <div className="pick">
@@ -508,14 +521,25 @@ function Game({
       {match.status === 'finished' && !revealing && (
         <div className="panel">
           <div className="actions">
+            {myPlayOn && (
+              <button
+                className="btn secondary"
+                disabled={busy}
+                onClick={() => confirm('Reveal your word? You won’t be able to keep guessing.') && run(() => revealWord(me, match.id))}
+              >
+                Reveal word
+              </button>
+            )}
             {isPlayer && opp && (
               <button className="btn" disabled={busy} onClick={rematch}>
                 Rematch
               </button>
             )}
-            <button className="btn secondary" onClick={() => go('/')}>
-              All matches
-            </button>
+            {!myPlayOn && (
+              <button className="btn secondary" onClick={() => go('/')}>
+                All matches
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -539,6 +563,13 @@ function Game({
   )
 }
 
+/** Face-off guess counts, e.g. "You 2 · Bob 4" ("—" for a word that wasn't solved). */
+export function faceoffScore(match: Match, me: string, nameOf: (uid: string | null) => string) {
+  const { mine, theirs } = faceoffBoards(match, me)
+  const tally = (b: typeof mine) => (b?.solvedBy ? String(b.guesses.length) : '—')
+  return `You ${tally(mine)} · ${nameOf(otherPlayer(match, me))} ${tally(theirs)}`
+}
+
 export function resultText(match: Match, me: string, nameOf: (uid: string | null) => string) {
   if (match.mode === 'team') {
     if (match.result === 'won') return 'Solved! Nice teamwork 🎉'
@@ -546,11 +577,8 @@ export function resultText(match: Match, me: string, nameOf: (uid: string | null
   }
   const opp = otherPlayer(match, me)
   if (match.mode === 'faceoff' && match.endReason !== 'resigned') {
-    const { mine, theirs } = faceoffBoards(match, me)
-    const tally = (b: typeof mine) => (b?.solvedBy ? String(b.guesses.length) : '—')
-    const score = ` (${tally(mine)} vs ${tally(theirs)})`
-    if (match.result === 'draw') return `Draw!${score}`
-    return match.winner === me ? `You win!${score} 🎉` : `${nameOf(match.winner)} wins${score}`
+    if (match.result === 'draw') return 'Draw!'
+    return match.winner === me ? 'You win! 🎉' : `${nameOf(match.winner)} wins`
   }
   if (match.endReason === 'resigned') {
     return match.winner === me ? `${nameOf(opp)} resigned. You win!` : 'You resigned'

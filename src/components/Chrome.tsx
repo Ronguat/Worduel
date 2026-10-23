@@ -108,6 +108,10 @@ function Help({ onClose }: { onClose: () => void }) {
         <li>Each of you picks a word for the other to guess. Any real word counts.</li>
         <li>Guess at your own pace on your own board. You can watch your opponent's progress on your word.</li>
         <li>Fewer guesses wins; the same number is a draw.</li>
+        <li>
+          Once the result is settled, the loser can keep guessing to finish the word (it won't change the result) or
+          reveal it.
+        </li>
       </ul>
       <h3>Team</h3>
       <ul>

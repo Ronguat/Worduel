@@ -1,4 +1,4 @@
-import { DUEL_VISIBLE_ROWS, boardTurn, decodeAnswer, isOpen, score } from '../game/logic'
+import { DUEL_VISIBLE_ROWS, boardTurn, decodeAnswer, isOpen, isPlayingOn, score } from '../game/logic'
 import type { Match, Mark } from '../types'
 
 const MIN_OPEN_ENDED_ROWS = 6
@@ -25,7 +25,7 @@ function rowSpecs(match: Match, index: number, me: string, draft: string, seen: 
     by: g.by === me ? 'me' : 'them',
     flip: hidden + i >= seen,
   }))
-  if (isOpen(board) && match.status === 'active' && (match.mode !== 'faceoff' || board.a)) {
+  if (isOpen(board) && (match.status === 'active' || isPlayingOn(match, board)) && (match.mode !== 'faceoff' || board.a)) {
     rows.push({ kind: 'input', letters: draft })
   }
   const target = match.mode === 'team' ? (match.maxGuesses ?? 6) : MIN_OPEN_ENDED_ROWS
@@ -56,7 +56,8 @@ export function Board({ match, index, me, draft, seen, selected, canType, expand
   const revealing = board.guesses.length > seen
   const len = match.length
   const active = match.status === 'active'
-  const showAnswer = match.status === 'finished' && !board.solvedBy && !revealing && !!answer && (!faceoff || board.guesser === me)
+  const showAnswer =
+    match.status === 'finished' && !board.solvedBy && !revealing && !!answer && (!faceoff || board.guesser === me) && !isPlayingOn(match, board)
   const n = board.guesses.length
   const guessCount = `${n} guess${n === 1 ? '' : 'es'}`
 
@@ -67,7 +68,9 @@ export function Board({ match, index, me, draft, seen, selected, canType, expand
     label = mine ? 'You' : nameOf(board.guesser ?? '')
     if (!board.a) status = mine ? 'Waiting for their word' : 'Pick their word'
     else if (board.solvedBy && !revealing) status = `✓ in ${n}`
+    else if (board.failed) status = `Gave up after ${n}`
     else if (!mine) status = `Your word: ${answer.toUpperCase()}`
+    else if (isPlayingOn(match, board)) status = `Playing on · ${guessCount}`
     else if (n) status = guessCount
   } else if (board.solvedBy && !revealing) {
     status = `✓ ${board.solvedBy === me ? 'You' : nameOf(board.solvedBy)}`

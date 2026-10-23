@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGuesses, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, needsMe, teamMaxGuesses, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith } from './logic'
+import { applyGuesses, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, isPlayingOn, needsMe, revealFaceoffWord, teamMaxGuesses, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith } from './logic'
 import type { Match } from '../types'
 
 const valid = () => true
@@ -192,6 +192,36 @@ describe('face-off', () => {
     m = play(m, 'b', 'stout')
     expect(m.status).toBe('finished')
     expect(m.winner).toBe('a')
+  })
+
+  it('lets the loser keep guessing without changing the result', () => {
+    let m = pick(pick(makeMatch('faceoff', []), 'a', 'pious'), 'b', 'crane')
+    m = play(m, 'a', 'crane') // a solves in 1
+    m = play(m, 'b', 'adieu') // b can no longer win
+    expect(m.status).toBe('finished')
+    expect(m.winner).toBe('a')
+    const bBoard = m.boards.findIndex((x) => x.guesser === 'b')
+    expect(isPlayingOn(m, m.boards[bBoard])).toBe(true)
+    expect(needsMe(m, 'b')).toBe(false)
+    // the winner can't play on, the loser can
+    expect(applyGuesses(m, 'a', [{ board: bBoard, word: 'pious' }], valid, 3).ok).toBe(false)
+    m = play(m, 'b', 'stout')
+    m = play(m, 'b', 'pious')
+    expect(m.boards[bBoard].solvedBy).toBe('b')
+    expect(m.boards[bBoard].guesses).toHaveLength(3)
+    expect(m.winner).toBe('a')
+    expect(m.result).toBeNull()
+  })
+
+  it('lets the loser reveal the word instead', () => {
+    let m = pick(pick(makeMatch('faceoff', []), 'a', 'pious'), 'b', 'crane')
+    m = play(m, 'a', 'crane')
+    expect(revealFaceoffWord(m, 'b', 2).ok).toBe(false) // not decided yet
+    m = play(m, 'b', 'adieu')
+    const r = revealFaceoffWord(m, 'b', 3)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.match.boards.some((x) => x.guesser === 'b' && x.failed)).toBe(true)
+    expect(applyGuesses(r.match, 'b', [{ board: 1, word: 'pious' }], valid, 4).ok).toBe(false)
   })
 
   it('calls equal guess counts a draw', () => {
