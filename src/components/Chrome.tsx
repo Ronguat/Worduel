@@ -116,6 +116,14 @@ function Help({ onClose }: { onClose: () => void }) {
       </ul>
       <h3>Hard mode</h3>
       <p>Every revealed hint must be used in later guesses, no matter who revealed it.</p>
+      <h3>Chat</h3>
+      <ul>
+        <li>Right-click a message to reply to it (long-press on a phone). Tap a quote to jump to the original.</li>
+        <li>
+          Formatting: <code>**bold**</code>, <code>*italic*</code>, <code>~~strike~~</code>, <code>`code`</code>, and{' '}
+          <code>||spoiler||</code>, which stays hidden until tapped. A preview appears while you type.
+        </li>
+      </ul>
     </Modal>
   )
 }

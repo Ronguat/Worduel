@@ -44,11 +44,16 @@ service cloud.firestore {
         }
         allow read: if isPlayer();
         allow create: if isPlayer()
-          && request.resource.data.keys().hasOnly(['by', 'text', 'at'])
+          && request.resource.data.keys().hasOnly(['by', 'text', 'at', 'replyTo'])
           && request.resource.data.by == request.auth.uid
           && request.resource.data.text is string
           && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 500;
+          && request.resource.data.text.size() <= 500
+          && (!('replyTo' in request.resource.data)
+            || (request.resource.data.replyTo is map
+              && request.resource.data.replyTo.keys().hasOnly(['id', 'by', 'text'])
+              && request.resource.data.replyTo.text is string
+              && request.resource.data.replyTo.text.size() <= 200));
       }
     }
   }

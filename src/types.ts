@@ -62,6 +62,14 @@ export interface ChatMessage {
   by: string
   text: string
   at: number
+  /** the message being replied to, with a short plain-text snippet of it */
+  replyTo?: ReplyRef
+}
+
+export interface ReplyRef {
+  id: string
+  by: string
+  text: string
 }
 
 export interface GuessEntry {

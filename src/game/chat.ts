@@ -1,15 +1,24 @@
 import { addDoc, collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { db } from '../firebase'
-import type { ChatMessage } from '../types'
+import type { ChatMessage, ReplyRef } from '../types'
+import { parseMd, toPlain } from './markdown'
 
 export const MAX_CHAT_LENGTH = 500
+const MAX_SNIPPET = 140
+
+/** What a reply carries of the original: who wrote it and a plain-text snippet (spoilers stay hidden). */
+export function replyRef(m: ChatMessage): ReplyRef {
+  const plain = toPlain(parseMd(m.text)).replace(/\s+/g, ' ').trim()
+  const text = [...plain].length > MAX_SNIPPET ? [...plain].slice(0, MAX_SNIPPET - 1).join('') + '…' : plain
+  return { id: m.id, by: m.by, text }
+}
 
 const messagesOf = (matchId: string) => collection(db, 'matches', matchId, 'messages')
 
-export async function sendMessage(matchId: string, uid: string, text: string) {
+export async function sendMessage(matchId: string, uid: string, text: string, replyTo?: ReplyRef) {
   const at = Date.now()
-  await addDoc(messagesOf(matchId), { by: uid, text: text.slice(0, MAX_CHAT_LENGTH), at })
+  await addDoc(messagesOf(matchId), { by: uid, text: text.slice(0, MAX_CHAT_LENGTH), at, ...(replyTo ? { replyTo } : {}) })
   await updateDoc(doc(db, 'matches', matchId), { lastChat: { by: uid, at } })
 }
 
