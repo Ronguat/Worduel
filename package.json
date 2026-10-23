@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev:emu": "VITE_EMULATOR=1 vite",
+    "emulators": "npx firebase-tools emulators:start --only auth,firestore"
   },
   "dependencies": {
     "firebase": "^11.10.0",

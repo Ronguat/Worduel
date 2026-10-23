@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /matches/{matchId} {
+      // Anyone signed in can open a match by its (unguessable) link, so invites work.
+      allow get: if signedIn();
+      // Listing only returns your own matches.
+      allow list: if signedIn() && request.auth.uid in resource.data.players;
+
+      allow create: if signedIn()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.auth.uid in request.resource.data.players
+        && request.resource.data.players.size() <= 2;
+
+      allow update: if signedIn() && (
+        // players can play; the roster can't change
+        (request.auth.uid in resource.data.players
+          && request.resource.data.players == resource.data.players)
+        // or join an open invite as the second player
+        || (resource.data.status == 'waiting'
+          && resource.data.players.size() == 1
+          && request.resource.data.players == resource.data.players.concat([request.auth.uid]))
+      );
+
+      // unanswered invites can be withdrawn by their creator
+      allow delete: if signedIn()
+        && request.auth.uid == resource.data.createdBy
+        && resource.data.status == 'waiting';
+    }
+  }
+}
