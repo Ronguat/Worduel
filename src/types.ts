@@ -1,4 +1,4 @@
-export type Mode = 'duel' | 'team'
+export type Mode = 'duel' | 'team' | 'faceoff'
 export type WordLength = 5 | 6
 export type Mark = 'correct' | 'present' | 'absent'
 
@@ -18,11 +18,13 @@ export interface Guess {
 }
 
 export interface BoardState {
-  /** the answer, lightly obfuscated so it isn't readable at a glance */
+  /** the answer, lightly obfuscated so it isn't readable at a glance ('' until picked in face-off) */
   a: string
   guesses: Guess[]
   solvedBy: string | null
   failed: boolean
+  /** face-off only: the player guessing on this board (the other player picked its word) */
+  guesser?: string
 }
 
 export interface Match {
@@ -45,10 +47,10 @@ export interface Match {
   turn: string | null
   turnCount: number
   boards: BoardState[]
-  /** duel only */
+  /** duel and face-off */
   winner: string | null
-  /** team only */
-  result: 'won' | 'lost' | null
+  /** team: won/lost; face-off: draw */
+  result: 'won' | 'lost' | 'draw' | null
   endReason: 'solved' | 'failed' | 'resigned' | null
   lastMove: { by: string; at: number } | null
 }

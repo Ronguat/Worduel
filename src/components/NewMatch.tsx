@@ -74,11 +74,16 @@ export function NewMatch({ user, history }: { user: User; history: Match[] }) {
               <button aria-pressed={mode === 'team'} onClick={() => set({ mode: 'team' })}>
                 Team
               </button>
+              <button aria-pressed={mode === 'faceoff'} onClick={() => set({ mode: 'faceoff' })}>
+                Face-off
+              </button>
             </div>
             <div className="hint">
               {mode === 'duel'
-                ? 'Take turns guessing. No guess limit; whoever gets the word wins it.'
-                : `Work together; either of you can guess any time. ${teamMaxGuesses(length)} guesses per board.`}
+                ? 'Take turns guessing on shared boards. No guess limit; whoever gets the word wins it.'
+                : mode === 'team'
+                  ? `Work together; either of you can guess any time. ${teamMaxGuesses(length)} guesses per board.`
+                  : "Each of you picks a word for the other, then guess at your own pace. Fewer guesses wins; a tie is a draw."}
             </div>
           </div>
 
@@ -93,6 +98,7 @@ export function NewMatch({ user, history }: { user: User; history: Match[] }) {
             </div>
           </div>
 
+          {mode !== 'faceoff' && (
           <div className="field">
             <label>Boards</label>
             <div className="stepper">
@@ -108,10 +114,11 @@ export function NewMatch({ user, history }: { user: User; history: Match[] }) {
               {boardCount === 1
                 ? 'One puzzle.'
                 : mode === 'duel'
-                  ? `${boardCount} separate puzzles. Each turn, guess on as many as you like. Most boards won takes the match.`
+                  ? `${boardCount} separate puzzles. Each turn, guess once on as many as you like. Most boards won takes the match.`
                   : `${boardCount} separate puzzles. Solve them all to win.`}
             </div>
           </div>
+          )}
 
           <div className="field">
             <div className="switch">

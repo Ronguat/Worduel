@@ -1,12 +1,23 @@
 import type { User } from 'firebase/auth'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createMatch, deleteMatch, joinMatch, resignMatch, submitGuesses } from '../game/actions'
-import { decodeAnswer, hardModeViolation, isOpen, keyboardStatus, otherPlayer } from '../game/logic'
+import { createMatch, deleteMatch, endTurnAction, joinMatch, pickFaceoffWord, resignMatch, submitGuesses } from '../game/actions'
+import {
+  canGuessOn,
+  decodeAnswer,
+  faceoffBoards,
+  guessedThisTurn,
+  hardModeViolation,
+  isOpen,
+  keyboardStatus,
+  needsMe,
+  otherPlayer,
+} from '../game/logic'
 import { loadValidWords } from '../game/words'
 import { go, useMatch, useStoredState, useToast } from '../hooks'
-import type { GuessEntry, Match } from '../types'
+import type { Match } from '../types'
 import { Board, boardRowCount } from './Board'
 import { BackButton, Header, HelpButton, ThemeButton } from './Chrome'
+import { describe } from './Lobby'
 import { Keyboard } from './Keyboard'
 
 interface Props {
@@ -52,7 +63,8 @@ function layout(w: number, h: number, n: number, len: number, rows: number, extr
 
 interface Drafts {
   drafts: string[]
-  staged: (string | null)[]
+  /** face-off: the word being typed for the opponent */
+  pick?: string
 }
 
 function Game({ match, user, history, theme }: { match: Match; user: User; history: Match[]; theme: Props['theme'] }) {
@@ -60,16 +72,24 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
   const isPlayer = match.players.includes(me)
   const opp = otherPlayer(match, me)
   const nameOf = useCallback((uid: string | null) => (uid && match.profiles[uid]?.name) || 'Opponent', [match.profiles])
-  const multi = match.boardCount > 1
-  const stageMode = match.mode === 'duel' && multi
+  const nBoards = match.boards.length
+  const multi = nBoards > 1
   const active = match.status === 'active'
-  const myTurn = active && isPlayer && (match.mode === 'team' || match.turn === me)
+  const faceoff = match.mode === 'faceoff'
+  const fo = faceoff ? faceoffBoards(match, me) : null
+  const mustPick = active && isPlayer && !!fo?.theirs && !fo.theirs.a
+  const myTurn = needsMe(match, me)
+  const typeable = match.boards.map((_, i) => canGuessOn(match, me, i))
+  const typeableKey = typeable.join(',')
+  // In face-off your own board comes first.
+  const boardOrder = match.boards.map((_, i) => i)
+  if (fo?.mine && match.boards.indexOf(fo.mine) === 1) boardOrder.reverse()
   const counts = match.boards.map((b) => b.guesses.length)
 
-  const [{ drafts, staged }, setDraftState] = useStoredState<Drafts>(`draft:${match.id}`, { drafts: [], staged: [] })
+  const [{ drafts, pick = '' }, setDraftState] = useStoredState<Drafts>(`draft:${match.id}`, { drafts: [] })
   const [storedSeen, setSeen] = useStoredState<number[] | null>(`seen:${match.id}`, null)
   const seen = storedSeen ?? counts
-  const [selected, setSelected] = useState(() => Math.max(0, match.boards.findIndex(isOpen)))
+  const [selected, setSelected] = useState(() => Math.max(0, typeable.indexOf(true)))
   const [expanded, setExpanded] = useState<boolean[]>([])
   const [shake, setShake] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
@@ -90,21 +110,23 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
   }, [countsKey, storedSeen])
   const revealing = counts.some((c, i) => c > (seen[i] ?? 0))
 
-  // Keep the selection on a board that can still be played.
+  // Keep the selection on a board you can guess on, moving forward to the next one after a guess.
   useEffect(() => {
-    if (!isOpen(match.boards[selected]) && match.boards.some(isOpen)) {
-      setSelected(match.boards.findIndex(isOpen))
+    if (typeable[selected]) return
+    for (let k = 1; k <= nBoards; k++) {
+      const j = (selected + k) % nBoards
+      if (typeable[j]) return setSelected(j)
     }
-  }, [match, selected])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeableKey, selected, nBoards])
 
-  const setBoardDraft = (b: number, draft: string, stage: string | null = null) =>
+  const setBoardDraft = (b: number, draft: string) =>
     setDraftState((s) => {
       const d = [...s.drafts]
-      const st = [...s.staged]
       d[b] = draft
-      st[b] = stage
-      return { drafts: d, staged: st }
+      return { ...s, drafts: d }
     })
+  const setPick = (word: string) => setDraftState((s) => ({ ...s, pick: word }))
 
   const fail = (b: number, msg: string) => {
     showToast(msg)
@@ -112,21 +134,15 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
     window.setTimeout(() => setShake(null), 500)
   }
 
-  const send = async (entries: GuessEntry[]) => {
+  /** Runs a server action, reporting failures as a toast. Resolves true on success. */
+  const run = async (action: () => Promise<void>) => {
     setBusy(true)
     try {
-      await submitGuesses(me, match.id, match.length, entries)
-      setDraftState((s) => {
-        const d = [...s.drafts]
-        const st = [...s.staged]
-        for (const e of entries) {
-          d[e.board] = ''
-          st[e.board] = null
-        }
-        return { drafts: d, staged: st }
-      })
+      await action()
+      return true
     } catch (e) {
       showToast((e as Error).message || 'Something went wrong', 3000)
+      return false
     } finally {
       setBusy(false)
     }
@@ -141,40 +157,36 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
       const v = hardModeViolation(word, decodeAnswer(board.a), board.guesses.map((g) => g.w))
       if (v) return fail(b, v)
     }
-    if (stageMode) {
-      setBoardDraft(b, '', word)
-      for (let k = 1; k < match.boardCount; k++) {
-        const j = (b + k) % match.boardCount
-        if (isOpen(match.boards[j]) && !staged[j]) {
-          setSelected(j)
-          break
-        }
-      }
-      return
-    }
-    await send([{ board: b, word }])
+    if (await run(() => submitGuesses(me, match.id, match.length, [{ board: b, word }]))) setBoardDraft(b, '')
   }
 
-  const queued: GuessEntry[] = staged.flatMap((w, i) => (w && match.boards[i] && isOpen(match.boards[i]) ? [{ board: i, word: w }] : []))
+  const commitPick = async (word: string) => {
+    if (word.length < match.length) return fail(-1, 'Not enough letters')
+    const words = await loadValidWords(match.length)
+    if (!words.has(word)) return fail(-1, 'Not in word list')
+    if (await run(() => pickFaceoffWord(me, match.id, match.length, word))) setPick('')
+  }
 
   const onKey = (key: string) => {
-    if (!active || !isPlayer) return
-    if (!myTurn) return showToast(`It's ${nameOf(opp)}'s turn`)
-    if (busy) return
-    const b = selected
-    if (!isOpen(match.boards[b])) return
-    const draft = drafts[b] ?? ''
-    const stagedWord = staged[b] ?? null
-    if (key === 'Backspace') {
-      if (stagedWord) setBoardDraft(b, stagedWord)
-      else setBoardDraft(b, draft.slice(0, -1))
-    } else if (key === 'Enter') {
-      if (stagedWord) {
-        if (queued.length) void send(queued)
-      } else void commit(b, draft)
-    } else if (/^[a-z]$/.test(key) && !stagedWord && draft.length < match.length) {
-      setBoardDraft(b, draft + key)
+    if (!active || !isPlayer || busy) return
+    if (mustPick) {
+      if (key === 'Backspace') setPick(pick.slice(0, -1))
+      else if (key === 'Enter') void commitPick(pick)
+      else if (/^[a-z]$/.test(key) && pick.length < match.length) setPick(pick + key)
+      return
     }
+    if (match.mode === 'duel' && match.turn !== me) return showToast(`It's ${nameOf(opp)}'s turn`)
+    const b = selected
+    if (!typeable[b]) {
+      if (fo?.mine && !fo.mine.a) showToast(`Waiting for ${nameOf(opp)} to pick your word`)
+      else if (fo?.mine?.solvedBy) showToast(`Waiting for ${nameOf(opp)} to finish`)
+      else if (match.mode === 'duel' && isOpen(match.boards[b])) showToast('You already guessed on this board this turn')
+      return
+    }
+    const draft = drafts[b] ?? ''
+    if (key === 'Backspace') setBoardDraft(b, draft.slice(0, -1))
+    else if (key === 'Enter') void commit(b, draft)
+    else if (/^[a-z]$/.test(key) && draft.length < match.length) setBoardDraft(b, draft + key)
   }
 
   const onKeyRef = useRef(onKey)
@@ -190,12 +202,12 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
         onKeyRef.current(e.key.toLowerCase())
       } else if (multi && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
         const dir = e.key === 'ArrowRight' ? 1 : -1
-        setSelected((s) => (s + dir + match.boardCount) % match.boardCount)
+        setSelected((s) => (s + dir + nBoards) % nBoards)
       }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [multi, match.boardCount])
+  }, [multi, nBoards])
 
   // Size tiles to fit the space between the banner and the keyboard.
   const areaRef = useRef<HTMLDivElement>(null)
@@ -208,13 +220,18 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
     return () => ro.disconnect()
   }, [])
   const rowCount = Math.max(...match.boards.map((_, i) => boardRowCount(match, i, !!expanded[i])))
-  const hasEarlier = match.mode === 'duel' && counts.some((c) => c > 8)
-  const { tile, cols } = layout(area.w, area.h, match.boardCount, match.length, rowCount, (multi ? 18 : 0) + (hasEarlier ? 20 : 0))
+  const hasEarlier = match.mode !== 'team' && counts.some((c) => c > 8)
+  const { tile, cols } = layout(area.w, area.h, Math.max(1, nBoards), match.length, rowCount, (multi ? 18 : 0) + (hasEarlier ? 20 : 0))
 
-  const selBoard = match.boards[selected]
+  // The keyboard reflects the board you're guessing on (in face-off, always your own).
+  const keyIndex = fo?.mine ? match.boards.indexOf(fo.mine) : selected
+  const keyBoard = match.boards[keyIndex]
   const marks = useMemo(
-    () => keyboardStatus(decodeAnswer(selBoard.a), selBoard.guesses.slice(0, seen[selected] ?? 0).map((g) => g.w)),
-    [selBoard, seen, selected],
+    () =>
+      mustPick || !keyBoard?.a
+        ? {}
+        : keyboardStatus(decodeAnswer(keyBoard.a), keyBoard.guesses.slice(0, seen[keyIndex] ?? 0).map((g) => g.w)),
+    [mustPick, keyBoard, seen, keyIndex],
   )
 
   const rematch = async () => {
@@ -262,7 +279,7 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
 
   const doResign = async () => {
     setMenuOpen(false)
-    const q = match.mode === 'duel' ? `Resign? ${nameOf(opp)} will win this match.` : 'Give up? This counts as a team loss.'
+    const q = match.mode === 'team' ? 'Give up? This counts as a team loss.' : `Resign? ${nameOf(opp)} will win this match.`
     if (!confirm(q)) return
     try {
       await resignMatch(me, match.id)
@@ -295,7 +312,7 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
       banner = (
         <>
           Your turn
-          <span className="sub">{stageMode ? 'Pick boards, type a guess on each, then submit' : score}</span>
+          <span className="sub">{multi ? `Guess on any boards, then end your turn · ${score}` : score}</span>
         </>
       )
     } else {
@@ -306,6 +323,31 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
         </>
       )
     }
+  } else if (faceoff && fo?.mine && fo.theirs) {
+    const { mine, theirs } = fo
+    const them = nameOf(opp)
+    let sub = ''
+    if (mustPick) {
+      banner = `Pick a word for ${them}`
+      sub = mine.a ? `${them} already picked yours` : 'Any real word. Fewest guesses wins.'
+    } else if (!mine.a) {
+      banner = `Waiting for ${them} to pick your word`
+    } else if (mine.solvedBy) {
+      banner = `Solved in ${mine.guesses.length}!`
+      sub = `${them} has used ${theirs.guesses.length} guess${theirs.guesses.length === 1 ? '' : 'es'} so far`
+    } else {
+      banner = `Guess ${them}'s word`
+      sub = theirs.solvedBy
+        ? `${them} solved yours in ${theirs.guesses.length}. Beat that!`
+        : `${them} has used ${theirs.guesses.length} guess${theirs.guesses.length === 1 ? '' : 'es'}`
+    }
+    if (myTurn) bannerClass += ' your-turn'
+    banner = (
+      <>
+        {banner}
+        {sub && <span className="sub">{sub}</span>}
+      </>
+    )
   } else {
     banner = (
       <>
@@ -362,17 +404,16 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
           className={`boards ${multi ? 'multi' : ''}`}
           style={{ '--tile': `${tile}px`, gridTemplateColumns: `repeat(${cols}, auto)` } as React.CSSProperties}
         >
-          {match.boards.map((_, i) => (
+          {boardOrder.map((i) => (
             <Board
               key={i}
               match={match}
               index={i}
               me={me}
               draft={drafts[i] ?? ''}
-              staged={staged[i] ?? null}
               seen={seen[i] ?? 0}
               selected={i === selected}
-              canType={myTurn}
+              canType={typeable[i] && !mustPick}
               expanded={!!expanded[i]}
               shaking={shake === i}
               nameOf={(uid) => nameOf(uid)}
@@ -401,11 +442,7 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
           </div>
         ) : (
           <div className="panel">
-            <div>
-              {match.mode === 'duel' ? 'Duel' : 'Team'} · {match.length} letters · {match.boardCount} board
-              {match.boardCount > 1 ? 's' : ''}
-              {match.hardMode ? ' · Hard mode' : ''}
-            </div>
+            <div>{describe(match)}</div>
             <button className="btn" disabled={busy} onClick={join}>
               Join match
             </button>
@@ -414,17 +451,34 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
 
       {active && isPlayer && (
         <>
-          {stageMode && myTurn && (
+          {match.mode === 'duel' && multi && match.turn === me && (
             <div className="submit-bar">
               <span>
-                {queued.length} of {match.boards.filter(isOpen).length} queued
+                Guessed on {match.boards.filter((b) => guessedThisTurn(match, b)).length} of{' '}
+                {match.boards.filter((b) => isOpen(b)).length} boards
               </span>
-              <button className="btn" disabled={!queued.length || busy} onClick={() => send(queued)}>
-                Submit turn
+              <button
+                className="btn"
+                disabled={busy || !match.boards.some((b) => guessedThisTurn(match, b))}
+                onClick={() => run(() => endTurnAction(me, match.id))}
+              >
+                End turn
               </button>
             </div>
           )}
-          <Keyboard marks={marks} disabled={!myTurn} onKey={onKey} />
+          {mustPick && (
+            <div className="pick">
+              <div className={`row ${shake === -1 ? 'shake' : ''}`} style={{ '--tile': '44px' } as React.CSSProperties}>
+                {Array.from({ length: match.length }, (_, i) => (
+                  <div key={i} className="tile" data-state={pick[i] ? 'tbd' : 'empty'}>
+                    {pick[i] ?? ''}
+                  </div>
+                ))}
+              </div>
+              <div className="hint">Type their word and press Enter. They won't see it until the end.</div>
+            </div>
+          )}
+          <Keyboard marks={marks} disabled={!mustPick && !typeable.some(Boolean)} onKey={onKey} />
         </>
       )}
 
@@ -458,6 +512,13 @@ export function resultText(match: Match, me: string, nameOf: (uid: string | null
     return match.endReason === 'resigned' ? 'You gave up' : 'Out of guesses'
   }
   const opp = otherPlayer(match, me)
+  if (match.mode === 'faceoff' && match.endReason !== 'resigned') {
+    const { mine, theirs } = faceoffBoards(match, me)
+    const tally = (b: typeof mine) => (b?.solvedBy ? String(b.guesses.length) : '—')
+    const score = ` (${tally(mine)} vs ${tally(theirs)})`
+    if (match.result === 'draw') return `Draw!${score}`
+    return match.winner === me ? `You win!${score} 🎉` : `${nameOf(match.winner)} wins${score}`
+  }
   if (match.endReason === 'resigned') {
     return match.winner === me ? `${nameOf(opp)} resigned. You win!` : 'You resigned'
   }

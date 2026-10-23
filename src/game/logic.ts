@@ -68,6 +68,39 @@ export function otherPlayer(match: Match, uid: string) {
   return match.players.find((p) => p !== uid) ?? null
 }
 
+/** Duel: has the player whose turn it is already guessed on this board this turn? */
+export function guessedThisTurn(match: Match, board: BoardState) {
+  return board.guesses.some((g) => g.turn === match.turnCount)
+}
+
+/** Whether `uid` may type a guess on board `i` right now. */
+export function canGuessOn(match: Match, uid: string, i: number) {
+  const board = match.boards[i]
+  if (!board || match.status !== 'active' || !match.players.includes(uid) || !isOpen(board)) return false
+  if (match.mode === 'duel') return match.turn === uid && !guessedThisTurn(match, board)
+  if (match.mode === 'faceoff') return board.guesser === uid && !!board.a
+  return true
+}
+
+/** Face-off: the board `uid` is guessing on, and the one their opponent is guessing on (`uid`'s word). */
+export function faceoffBoards(match: Match, uid: string) {
+  return {
+    mine: match.boards.find((b) => b.guesser === uid) ?? null,
+    theirs: match.boards.find((b) => b.guesser && b.guesser !== uid) ?? null,
+  }
+}
+
+/** Does this match have something for `uid` to do? */
+export function needsMe(match: Match, uid: string) {
+  if (match.status !== 'active' || !match.players.includes(uid)) return false
+  if (match.mode === 'duel') return match.turn === uid
+  if (match.mode === 'faceoff') {
+    const { mine, theirs } = faceoffBoards(match, uid)
+    return (!!theirs && !theirs.a) || (!!mine && !!mine.a && isOpen(mine))
+  }
+  return true
+}
+
 /** Duel winner: most boards solved, then fewest rows used on the boards won, then the player who went second. */
 export function duelWinner(match: Match): string | null {
   if (match.players.length < 2) return null
@@ -77,6 +110,22 @@ export function duelWinner(match: Match): string | null {
   })
   tally.sort((x, y) => y.boards - x.boards || x.rows - y.rows || (x.uid === match.firstPlayer ? 1 : -1))
   return tally[0].uid
+}
+
+/**
+ * Face-off result once it's decided: fewer guesses wins, equal is a draw.
+ * Decided early when one player has solved and the other has already used as many guesses without solving.
+ */
+export function faceoffOutcome(match: Match): { winner: string | null; draw: boolean } | null {
+  const [x, y] = match.boards
+  if (!x || !y || !x.guesser || !y.guesser) return null
+  if (x.solvedBy && y.solvedBy) {
+    if (x.guesses.length === y.guesses.length) return { winner: null, draw: true }
+    return { winner: x.guesses.length < y.guesses.length ? x.guesser : y.guesser, draw: false }
+  }
+  if (x.solvedBy && y.guesses.length >= x.guesses.length) return { winner: x.guesser, draw: false }
+  if (y.solvedBy && x.guesses.length >= y.guesses.length) return { winner: y.guesser, draw: false }
+  return null
 }
 
 export type ApplyResult = { ok: true; match: Match } | { ok: false; error: string }
@@ -97,52 +146,78 @@ export function applyGuesses(
     return { ok: false, error: 'Only one guess per board per turn' }
   }
 
+  const label = (i: number) => (match.boardCount > 1 ? `Board ${i + 1}: ` : '')
   const boards = match.boards.map((b) => ({ ...b, guesses: [...b.guesses] }))
   for (const { board: i, word } of entries) {
     const board = boards[i]
     if (!board) return { ok: false, error: 'No such board' }
-    if (!isOpen(board)) return { ok: false, error: `Board ${i + 1} is already finished` }
+    if (!isOpen(board)) return { ok: false, error: `${label(i)}already finished` }
+    if (match.mode === 'duel' && guessedThisTurn(match, board)) {
+      return { ok: false, error: `${label(i)}you already guessed here this turn` }
+    }
+    if (match.mode === 'faceoff' && (board.guesser !== uid || !board.a)) {
+      return { ok: false, error: "You can't guess on that board" }
+    }
     if (word.length !== match.length) return { ok: false, error: 'Not enough letters' }
     if (!isValidWord(word)) return { ok: false, error: `${word.toUpperCase()} is not in the word list` }
     const answer = decodeAnswer(board.a)
     if (match.hardMode) {
       const v = hardModeViolation(word, answer, board.guesses.map((g) => g.w))
-      if (v) return { ok: false, error: match.boardCount > 1 ? `Board ${i + 1}: ${v}` : v }
+      if (v) return { ok: false, error: label(i) + v }
     }
     board.guesses.push({ w: word, by: uid, turn: match.turnCount, at: now })
     if (word === answer) board.solvedBy = uid
     else if (match.maxGuesses && board.guesses.length >= match.maxGuesses) board.failed = true
   }
 
-  const next: Match = {
-    ...match,
-    boards,
-    turnCount: match.turnCount + 1,
-    updatedAt: now,
-    lastMove: { by: uid, at: now },
-  }
+  let next: Match = { ...match, boards, updatedAt: now, lastMove: { by: uid, at: now } }
 
   if (match.mode === 'duel') {
     if (boards.every((b) => b.solvedBy)) {
-      next.status = 'finished'
-      next.endReason = 'solved'
-      next.turn = null
+      next = { ...next, status: 'finished', endReason: 'solved', turn: null }
       next.winner = duelWinner(next)
-    } else {
-      next.turn = otherPlayer(match, uid)
+    } else if (boards.filter(isOpen).every((b) => guessedThisTurn(next, b))) {
+      next = passTurn(next, uid)
+    }
+  } else if (match.mode === 'faceoff') {
+    next.turnCount++
+    const out = faceoffOutcome(next)
+    if (out) {
+      next = { ...next, status: 'finished', endReason: 'solved', winner: out.winner, result: out.draw ? 'draw' : null }
     }
   } else {
+    next.turnCount++
     if (boards.some((b) => b.failed)) {
-      next.status = 'finished'
-      next.result = 'lost'
-      next.endReason = 'failed'
+      next = { ...next, status: 'finished', result: 'lost', endReason: 'failed' }
     } else if (boards.every((b) => b.solvedBy)) {
-      next.status = 'finished'
-      next.result = 'won'
-      next.endReason = 'solved'
+      next = { ...next, status: 'finished', result: 'won', endReason: 'solved' }
     }
   }
   return { ok: true, match: next }
+}
+
+function passTurn(match: Match, uid: string): Match {
+  return { ...match, turn: otherPlayer(match, uid), turnCount: match.turnCount + 1 }
+}
+
+/** Duel: hand the turn over after guessing on at least one board. */
+export function endTurn(match: Match, uid: string, now: number): ApplyResult {
+  if (match.mode !== 'duel' || match.status !== 'active') return { ok: false, error: 'Nothing to end' }
+  if (match.turn !== uid) return { ok: false, error: 'Not your turn' }
+  if (!match.boards.some((b) => guessedThisTurn(match, b))) return { ok: false, error: 'Make at least one guess first' }
+  return { ok: true, match: { ...passTurn(match, uid), updatedAt: now, lastMove: { by: uid, at: now } } }
+}
+
+/** Face-off: `uid` picks the word their opponent has to guess. */
+export function setFaceoffWord(match: Match, uid: string, word: string, isValidWord: (w: string) => boolean, now: number): ApplyResult {
+  if (match.mode !== 'faceoff' || match.status !== 'active') return { ok: false, error: 'Not a face-off in progress' }
+  const i = match.boards.findIndex((b) => b.guesser && b.guesser !== uid)
+  if (i < 0 || !match.players.includes(uid)) return { ok: false, error: "You're not in this match" }
+  if (match.boards[i].a) return { ok: false, error: 'You already picked a word' }
+  if (word.length !== match.length) return { ok: false, error: 'Not enough letters' }
+  if (!isValidWord(word)) return { ok: false, error: `${word.toUpperCase()} is not in the word list` }
+  const boards = match.boards.map((b, j) => (j === i ? { ...b, a: encodeAnswer(word) } : b))
+  return { ok: true, match: { ...match, boards, updatedAt: now, lastMove: { by: uid, at: now } } }
 }
 
 export function resign(match: Match, uid: string, now: number): Match {
@@ -151,7 +226,7 @@ export function resign(match: Match, uid: string, now: number): Match {
     status: 'finished',
     endReason: 'resigned',
     turn: null,
-    winner: match.mode === 'duel' ? otherPlayer(match, uid) : null,
+    winner: match.mode === 'team' ? null : otherPlayer(match, uid),
     result: match.mode === 'team' ? 'lost' : null,
     updatedAt: now,
     lastMove: { by: uid, at: now },
@@ -180,7 +255,7 @@ export function newMatchData(opts: {
   return {
     mode: opts.mode,
     length: opts.length,
-    boardCount: opts.boardCount,
+    boardCount: opts.mode === 'faceoff' ? 1 : opts.boardCount,
     hardMode: opts.hardMode,
     maxGuesses: opts.mode === 'team' ? teamMaxGuesses(opts.length) : null,
     players: [opts.creator],
@@ -192,7 +267,8 @@ export function newMatchData(opts: {
     firstPlayer: null,
     turn: null,
     turnCount: 0,
-    boards: opts.answers.map((w) => ({ a: encodeAnswer(w), guesses: [], solvedBy: null, failed: false })),
+    boards:
+      opts.mode === 'faceoff' ? [] : opts.answers.map((w) => ({ a: encodeAnswer(w), guesses: [], solvedBy: null, failed: false })),
     winner: null,
     result: null,
     endReason: null,
@@ -202,13 +278,18 @@ export function newMatchData(opts: {
 
 /** Adds the second player and starts the match. */
 export function startWith(match: Omit<Match, 'id'>, uid: string, profile: { name: string; photo: string | null }, firstPlayer: string, now: number) {
+  const players = [...match.players, uid]
   return {
     ...match,
-    players: [...match.players, uid],
+    players,
     profiles: { ...match.profiles, [uid]: profile },
     status: 'active' as const,
     firstPlayer: match.mode === 'duel' ? firstPlayer : null,
     turn: match.mode === 'duel' ? firstPlayer : null,
+    boards:
+      match.mode === 'faceoff'
+        ? players.map((p) => ({ a: '', guesses: [], solvedBy: null, failed: false, guesser: p }))
+        : match.boards,
     updatedAt: now,
   }
 }

@@ -1,7 +1,7 @@
 import type { User } from 'firebase/auth'
 import { useState } from 'react'
 import { logOut } from '../game/actions'
-import { otherPlayer } from '../game/logic'
+import { faceoffBoards, needsMe, otherPlayer } from '../game/logic'
 import { go } from '../hooks'
 import type { Match } from '../types'
 import { Header, HelpButton, ThemeButton } from './Chrome'
@@ -16,7 +16,8 @@ function ago(t: number) {
 }
 
 export function describe(m: Match) {
-  return [m.mode === 'duel' ? 'Duel' : 'Team', `${m.length} letters`, m.boardCount > 1 ? `${m.boardCount} boards` : null, m.hardMode ? 'Hard' : null]
+  const mode = { duel: 'Duel', team: 'Team', faceoff: 'Face-off' }[m.mode]
+  return [mode, `${m.length} letters`, m.boardCount > 1 ? `${m.boardCount} boards` : null, m.hardMode ? 'Hard' : null]
     .filter(Boolean)
     .join(' · ')
 }
@@ -24,19 +25,36 @@ export function describe(m: Match) {
 function MatchCard({ m, me }: { m: Match; me: string }) {
   const opp = otherPlayer(m, me)
   const oppName = (opp && m.profiles[opp]?.name) || 'someone'
-  const title = m.status === 'waiting' ? 'Open invite' : m.mode === 'duel' ? `vs ${oppName}` : `Team with ${oppName}`
+  const title =
+    m.status === 'waiting'
+      ? 'Open invite'
+      : m.mode === 'team'
+        ? `Team with ${oppName}`
+        : m.mode === 'faceoff'
+          ? `Face-off vs ${oppName}`
+          : `vs ${oppName}`
   const guesses = m.boards.reduce((s, b) => s + b.guesses.length, 0)
   const solved = m.boards.filter((b) => b.solvedBy).length
-  const progress = m.boardCount > 1 ? `${solved}/${m.boardCount} solved` : guesses ? `${guesses} guess${guesses === 1 ? '' : 'es'}` : 'No guesses yet'
+  const fo = m.mode === 'faceoff' ? faceoffBoards(m, me) : null
+  const progress = fo
+    ? `${fo.mine?.guesses.length ?? 0} vs ${fo.theirs?.guesses.length ?? 0} guesses`
+    : m.boardCount > 1
+      ? `${solved}/${m.boardCount} solved`
+      : guesses
+        ? `${guesses} guess${guesses === 1 ? '' : 'es'}`
+        : 'No guesses yet'
 
   let pill = { text: '', cls: '' }
   if (m.status === 'waiting') pill = { text: 'Waiting', cls: '' }
-  else if (m.status === 'active') pill = m.mode === 'team' || m.turn === me ? { text: 'Your turn', cls: 'go' } : { text: 'Their turn', cls: '' }
+  else if (m.status === 'active') {
+    if (m.mode === 'team') pill = { text: 'Play', cls: 'go' }
+    else if (fo?.theirs && !fo.theirs.a) pill = { text: 'Pick a word', cls: 'go' }
+    else pill = needsMe(m, me) ? { text: 'Your turn', cls: 'go' } : { text: 'Waiting', cls: '' }
+  } else if (m.result === 'draw') pill = { text: 'Draw', cls: '' }
   else {
-    const won = m.mode === 'duel' ? m.winner === me : m.result === 'won'
+    const won = m.mode === 'team' ? m.result === 'won' : m.winner === me
     pill = { text: won ? 'Won' : 'Lost', cls: won ? 'win' : 'loss' }
   }
-  if (m.status === 'active' && m.mode === 'team') pill.text = 'Play'
 
   return (
     <button className="card" onClick={() => go(`/m/${m.id}`)}>
@@ -52,13 +70,14 @@ function MatchCard({ m, me }: { m: Match; me: string }) {
 }
 
 function records(matches: Match[], me: string) {
-  const by: Record<string, { name: string; dw: number; dl: number; tw: number; tl: number }> = {}
+  const by: Record<string, { name: string; dw: number; dl: number; tw: number; tl: number; fw: number; fl: number; fd: number }> = {}
   for (const m of matches) {
     if (m.status !== 'finished') continue
     const opp = otherPlayer(m, me)
     if (!opp) continue
-    const r = (by[opp] ??= { name: m.profiles[opp]?.name || 'Opponent', dw: 0, dl: 0, tw: 0, tl: 0 })
+    const r = (by[opp] ??= { name: m.profiles[opp]?.name || 'Opponent', dw: 0, dl: 0, tw: 0, tl: 0, fw: 0, fl: 0, fd: 0 })
     if (m.mode === 'duel') m.winner === me ? r.dw++ : r.dl++
+    else if (m.mode === 'faceoff') m.result === 'draw' ? r.fd++ : m.winner === me ? r.fw++ : r.fl++
     else m.result === 'won' ? r.tw++ : r.tl++
   }
   return Object.entries(by)
@@ -69,8 +88,8 @@ export function Lobby({ user, matches, theme }: { user: User; matches: Match[] |
   const [showAll, setShowAll] = useState(false)
   const me = user.uid
   const list = matches ?? []
-  const yourTurn = list.filter((m) => m.status === 'active' && (m.mode === 'team' || m.turn === me))
-  const theirTurn = list.filter((m) => m.status === 'active' && m.mode === 'duel' && m.turn !== me)
+  const yourTurn = list.filter((m) => needsMe(m, me))
+  const theirTurn = list.filter((m) => m.status === 'active' && !needsMe(m, me))
   const waiting = list.filter((m) => m.status === 'waiting')
   const finished = list.filter((m) => m.status === 'finished')
   const recs = records(list, me)
@@ -128,7 +147,7 @@ export function Lobby({ user, matches, theme }: { user: User; matches: Match[] |
           )}
 
           {section('Your turn', yourTurn)}
-          {section('Their turn', theirTurn)}
+          {section('Waiting on them', theirTurn)}
           {section('Waiting for a friend to join', waiting)}
 
           {recs.length > 0 && (
@@ -140,6 +159,10 @@ export function Lobby({ user, matches, theme }: { user: User; matches: Match[] |
                     <div className="who">vs {r.name}</div>
                     <div className="stat">
                       Duels <b>{r.dw}–{r.dl}</b>
+                    </div>
+                    <div className="stat">
+                      Face-offs <b>{r.fw}–{r.fl}</b>
+                      {r.fd > 0 && ` (${r.fd} drawn)`}
                     </div>
                     <div className="stat">
                       Team <b>{r.tw}–{r.tl}</b>

@@ -2,7 +2,7 @@ import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, type 
 import { collection, deleteDoc, doc, runTransaction, setDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import type { GuessEntry, Match, Mode, Profile, WordLength } from '../types'
-import { applyGuesses, newMatchData, nextFirstPlayer, resign, startWith } from './logic'
+import { applyGuesses, endTurn, newMatchData, nextFirstPlayer, resign, setFaceoffWord, startWith, type ApplyResult } from './logic'
 import { loadValidWords, pickAnswers } from './words'
 
 export async function signIn() {
@@ -43,7 +43,7 @@ export async function createMatch(
   const now = Date.now()
   let data = newMatchData({
     ...opts,
-    answers: await pickAnswers(opts.length, opts.boardCount),
+    answers: opts.mode === 'faceoff' ? [] : await pickAnswers(opts.length, opts.boardCount),
     creator: user.uid,
     creatorProfile: profileOf(user),
     now,
@@ -68,16 +68,28 @@ export async function joinMatch(user: User, id: string, history: Match[]) {
   })
 }
 
-export async function submitGuesses(uid: string, matchId: string, length: WordLength, entries: GuessEntry[]) {
-  const words = await loadValidWords(length)
+/** Reads the match, applies `update`, and writes the result, all in one transaction. */
+async function transact(matchId: string, update: (m: Match) => ApplyResult) {
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(matchRef(matchId))
     if (!snap.exists()) throw new Error('Match not found')
-    const result = applyGuesses({ id: matchId, ...(snap.data() as Omit<Match, 'id'>) }, uid, entries, (w) => words.has(w), Date.now())
+    const result = update({ id: matchId, ...(snap.data() as Omit<Match, 'id'>) })
     if (!result.ok) throw new Error(result.error)
     const { id: _id, ...data } = result.match
     tx.set(matchRef(matchId), data)
   })
+}
+
+export async function submitGuesses(uid: string, matchId: string, length: WordLength, entries: GuessEntry[]) {
+  const words = await loadValidWords(length)
+  await transact(matchId, (m) => applyGuesses(m, uid, entries, (w) => words.has(w), Date.now()))
+}
+
+export const endTurnAction = (uid: string, matchId: string) => transact(matchId, (m) => endTurn(m, uid, Date.now()))
+
+export async function pickFaceoffWord(uid: string, matchId: string, length: WordLength, word: string) {
+  const words = await loadValidWords(length)
+  await transact(matchId, (m) => setFaceoffWord(m, uid, word, (w) => words.has(w), Date.now()))
 }
 
 export async function resignMatch(uid: string, matchId: string) {
