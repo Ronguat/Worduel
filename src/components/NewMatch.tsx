@@ -7,19 +7,16 @@ import { useNameOf } from '../profiles'
 import type { Match, Mode, Profile, WordLength } from '../types'
 import { BackButton, Header, HelpButton } from './Chrome'
 
-const MAX_BOARDS = 8
-
 interface Settings {
   mode: Mode
   length: WordLength
-  boardCount: number
   hardMode: boolean
 }
 
 export function NewMatch({ user, me, history }: { user: User; me: Profile; history: Match[] }) {
   const stored = useMemo(() => Object.assign({}, ...history.map((m) => m.profiles)), [history])
   const nameOf = useNameOf(stored)
-  const [settings, setSettings] = useStoredState<Settings>('newMatchSettings', { mode: 'duel', length: 5, boardCount: 1, hardMode: true })
+  const [settings, setSettings] = useStoredState<Settings>('newMatchSettings', { mode: 'duel', length: 5, hardMode: true })
   const set = (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch }))
 
   // People you've already played with, most recent first.
@@ -40,7 +37,9 @@ export function NewMatch({ user, me, history }: { user: User; me: Profile; histo
     setError(null)
     try {
       const opp = opponents.find(([uid]) => uid === opponent)
-      const id = await createMatch(user, me, settings, opp ? { uid: opp[0], profile: { ...opp[1], name: nameOf(opp[0]) } } : null, history)
+      // Multi-board is retired for new matches; play several matches at once instead.
+      const { mode, length, hardMode } = settings
+      const id = await createMatch(user, me, { mode, length, hardMode, boardCount: 1 }, opp ? { uid: opp[0], profile: { ...opp[1], name: nameOf(opp[0]) } } : null, history)
       go(`/m/${id}`)
     } catch (e) {
       setError((e as Error).message)
@@ -48,7 +47,7 @@ export function NewMatch({ user, me, history }: { user: User; me: Profile; histo
     }
   }
 
-  const { mode, length, boardCount, hardMode } = settings
+  const { mode, length, hardMode } = settings
   return (
     <div className="screen">
       <Header left={<BackButton />} right={<HelpButton />} />
@@ -83,7 +82,7 @@ export function NewMatch({ user, me, history }: { user: User; me: Profile; histo
             </div>
             <div className="hint">
               {mode === 'duel'
-                ? 'Take turns guessing on shared boards. No guess limit; whoever gets the word wins it.'
+                ? 'Take turns guessing on a shared board. No guess limit; whoever gets the word wins it.'
                 : mode === 'team'
                   ? `Work together; either of you can guess any time. ${teamMaxGuesses(length)} guesses per board.`
                   : "Each of you picks a word for the other, then guess at your own pace. Fewer guesses wins; a tie is a draw."}
@@ -101,27 +100,6 @@ export function NewMatch({ user, me, history }: { user: User; me: Profile; histo
             </div>
           </div>
 
-          {mode !== 'faceoff' && (
-          <div className="field">
-            <label>Boards</label>
-            <div className="stepper">
-              <button onClick={() => set({ boardCount: Math.max(1, boardCount - 1) })} aria-label="Fewer boards">
-                −
-              </button>
-              <span>{boardCount}</span>
-              <button onClick={() => set({ boardCount: Math.min(MAX_BOARDS, boardCount + 1) })} aria-label="More boards">
-                +
-              </button>
-            </div>
-            <div className="hint">
-              {boardCount === 1
-                ? 'One puzzle.'
-                : mode === 'duel'
-                  ? `${boardCount} separate puzzles, each taking turns on its own. Most boards won takes the match.`
-                  : `${boardCount} separate puzzles. Solve them all to win.`}
-            </div>
-          </div>
-          )}
 
           <div className="field">
             <div className="switch">

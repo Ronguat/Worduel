@@ -96,12 +96,7 @@ function Help({ onClose }: { onClose: () => void }) {
       <h3>Duel</h3>
       <ul>
         <li>You take turns guessing on a shared board. There's no guess limit; whoever lands the word wins it.</li>
-        <li>
-          With several boards, each board is its own puzzle with its own turns: whoever didn't guess last on a board
-          is up there. Guess on any board where it's your move, whenever you like. Most boards won takes the match
-          (ties go to fewer rows used, then to whoever moved second on board 1).
-        </li>
-        <li>Who moves first alternates from board to board and from match to match.</li>
+        <li>Who goes first alternates from match to match.</li>
       </ul>
       <h3>Face-off</h3>
       <ul>
@@ -116,7 +111,7 @@ function Help({ onClose }: { onClose: () => void }) {
       <h3>Team</h3>
       <ul>
         <li>You're on the same side. Either of you can guess any time, as often as you like.</li>
-        <li>Each board allows 6 guesses (7 for six-letter words). Solve every board to win.</li>
+        <li>You get 6 guesses (7 for six-letter words).</li>
       </ul>
       <h3>Hard mode</h3>
       <p>Every revealed hint must be used in later guesses, no matter who revealed it.</p>

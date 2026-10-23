@@ -5,7 +5,7 @@ import { hasUnreadChat } from '../game/chat'
 import { faceoffBoards, needsMe, otherPlayer } from '../game/logic'
 import { go } from '../hooks'
 import { useNameOf } from '../profiles'
-import type { Match, Profile } from '../types'
+import type { BoardState, Match, Profile } from '../types'
 import { NicknameForm } from './Nickname'
 import { Header, HelpButton, Modal, ThemeButton } from './Chrome'
 
@@ -31,19 +31,15 @@ function MatchCard({ m, me }: { m: Match; me: string }) {
   const opp = otherPlayer(m, me)
   const nameOf = useNameOf(m.profiles)
   const oppName = opp ? nameOf(opp) : 'someone'
-  const title =
-    m.status === 'waiting'
-      ? 'Open invite'
-      : m.mode === 'team'
-        ? `Team with ${oppName}`
-        : m.mode === 'faceoff'
-          ? `Face-off vs ${oppName}`
-          : `vs ${oppName}`
+  // the mode leads the line below, so the title is just who it's with
+  const title = m.status === 'waiting' ? 'Open invite' : m.mode === 'team' ? `with ${oppName}` : `vs ${oppName}`
   const guesses = m.boards.reduce((s, b) => s + b.guesses.length, 0)
   const solved = m.boards.filter((b) => b.solvedBy).length
   const fo = m.mode === 'faceoff' ? faceoffBoards(m, me) : null
+  // a finished face-off shows each player's solve count ('—' if unsolved), like the match screen
+  const foCount = (b: BoardState | null) => (m.status === 'finished' && !b?.solvedBy ? '—' : String(b?.guesses.length ?? 0))
   const progress = fo
-    ? `${fo.mine?.guesses.length ?? 0} vs ${fo.theirs?.guesses.length ?? 0} guesses`
+    ? `${foCount(fo.mine)} vs ${foCount(fo.theirs)} guesses`
     : m.boardCount > 1
       ? `${solved}/${m.boardCount} solved`
       : guesses

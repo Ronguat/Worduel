@@ -269,7 +269,7 @@ function Game({
       const id = await createMatch(
         user,
         myProfile,
-        { mode: match.mode, length: match.length, boardCount: match.boardCount, hardMode: match.hardMode },
+        { mode: match.mode, length: match.length, boardCount: 1, hardMode: match.hardMode },
         { uid: opp, profile: match.profiles[opp] },
         history,
       )
