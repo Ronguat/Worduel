@@ -2,7 +2,7 @@
 
 Wordle for two, played asynchronously. Take turns chipping away at a puzzle (duel) or work on it together (team), close the app, and pick it back up later.
 
-Live at **https://ronguat.github.io/worduel/**. On a phone, use "Add to Home Screen" to get an app icon.
+Live at **https://ronguat.github.io/Worduel/**. On a phone, use "Add to Home Screen" to get an app icon.
 
 ## Rules
 
