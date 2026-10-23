@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { createMatch } from '../game/actions'
 import { otherPlayer, teamMaxGuesses } from '../game/logic'
 import { go, useStoredState } from '../hooks'
+import { useNameOf } from '../profiles'
 import type { Match, Mode, Profile, WordLength } from '../types'
 import { BackButton, Header, HelpButton } from './Chrome'
 
@@ -15,7 +16,9 @@ interface Settings {
   hardMode: boolean
 }
 
-export function NewMatch({ user, history }: { user: User; history: Match[] }) {
+export function NewMatch({ user, me, history }: { user: User; me: Profile; history: Match[] }) {
+  const stored = useMemo(() => Object.assign({}, ...history.map((m) => m.profiles)), [history])
+  const nameOf = useNameOf(stored)
   const [settings, setSettings] = useStoredState<Settings>('newMatchSettings', { mode: 'duel', length: 5, boardCount: 1, hardMode: true })
   const set = (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch }))
 
@@ -37,7 +40,7 @@ export function NewMatch({ user, history }: { user: User; history: Match[] }) {
     setError(null)
     try {
       const opp = opponents.find(([uid]) => uid === opponent)
-      const id = await createMatch(user, settings, opp ? { uid: opp[0], profile: opp[1] } : null, history)
+      const id = await createMatch(user, me, settings, opp ? { uid: opp[0], profile: { ...opp[1], name: nameOf(opp[0]) } } : null, history)
       go(`/m/${id}`)
     } catch (e) {
       setError((e as Error).message)
@@ -56,7 +59,7 @@ export function NewMatch({ user, history }: { user: User; history: Match[] }) {
             <div className="segmented">
               {opponents.map(([uid, p]) => (
                 <button key={uid} aria-pressed={opponent === uid} onClick={() => setOpponent(uid)}>
-                  {p?.name || 'Opponent'}
+                  {nameOf(uid) || p?.name}
                 </button>
               ))}
               <button aria-pressed={opponent === null} onClick={() => setOpponent(null)}>

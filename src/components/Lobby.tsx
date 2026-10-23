@@ -1,11 +1,13 @@
 import type { User } from 'firebase/auth'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { logOut } from '../game/actions'
 import { hasUnreadChat } from '../game/chat'
 import { faceoffBoards, needsMe, otherPlayer } from '../game/logic'
 import { go } from '../hooks'
-import type { Match } from '../types'
-import { Header, HelpButton, ThemeButton } from './Chrome'
+import { useNameOf } from '../profiles'
+import type { Match, Profile } from '../types'
+import { NicknameForm } from './Nickname'
+import { Header, HelpButton, Modal, ThemeButton } from './Chrome'
 
 function ago(t: number) {
   const s = (Date.now() - t) / 1000
@@ -25,7 +27,8 @@ export function describe(m: Match) {
 
 function MatchCard({ m, me }: { m: Match; me: string }) {
   const opp = otherPlayer(m, me)
-  const oppName = (opp && m.profiles[opp]?.name) || 'someone'
+  const nameOf = useNameOf(m.profiles)
+  const oppName = opp ? nameOf(opp) : 'someone'
   const title =
     m.status === 'waiting'
       ? 'Open invite'
@@ -77,13 +80,13 @@ function MatchCard({ m, me }: { m: Match; me: string }) {
   )
 }
 
-function records(matches: Match[], me: string) {
+function records(matches: Match[], me: string, nameOf: (uid: string) => string) {
   const by: Record<string, { name: string; dw: number; dl: number; tw: number; tl: number; fw: number; fl: number; fd: number }> = {}
   for (const m of matches) {
     if (m.status !== 'finished') continue
     const opp = otherPlayer(m, me)
     if (!opp) continue
-    const r = (by[opp] ??= { name: m.profiles[opp]?.name || 'Opponent', dw: 0, dl: 0, tw: 0, tl: 0, fw: 0, fl: 0, fd: 0 })
+    const r = (by[opp] ??= { name: nameOf(opp), dw: 0, dl: 0, tw: 0, tl: 0, fw: 0, fl: 0, fd: 0 })
     if (m.mode === 'duel') m.winner === me ? r.dw++ : r.dl++
     else if (m.mode === 'faceoff') m.result === 'draw' ? r.fd++ : m.winner === me ? r.fw++ : r.fl++
     else m.result === 'won' ? r.tw++ : r.tl++
@@ -91,7 +94,18 @@ function records(matches: Match[], me: string) {
   return Object.entries(by)
 }
 
-export function Lobby({ user, matches, theme }: { user: User; matches: Match[] | null; theme: { dark: boolean; toggle: () => void } }) {
+export function Lobby({
+  user,
+  me: myProfile,
+  matches,
+  theme,
+}: {
+  user: User
+  me: Profile
+  matches: Match[] | null
+  theme: { dark: boolean; toggle: () => void }
+}) {
+  const [renaming, setRenaming] = useState(false)
   const [menu, setMenu] = useState(false)
   const [showAll, setShowAll] = useState(false)
   const me = user.uid
@@ -100,7 +114,10 @@ export function Lobby({ user, matches, theme }: { user: User; matches: Match[] |
   const theirTurn = list.filter((m) => m.status === 'active' && !needsMe(m, me))
   const waiting = list.filter((m) => m.status === 'waiting')
   const finished = list.filter((m) => m.status === 'finished')
-  const recs = records(list, me)
+  // names stored with matches cover the moment before live profiles load
+  const stored = useMemo(() => Object.assign({}, ...list.map((m) => m.profiles)), [list])
+  const nameOf = useNameOf(stored)
+  const recs = records(list, me, (uid) => nameOf(uid))
 
   const section = (title: string, items: Match[], limit?: number) =>
     items.length > 0 && (
@@ -136,9 +153,27 @@ export function Lobby({ user, matches, theme }: { user: User; matches: Match[] |
       />
       {menu && (
         <div className="menu" onClick={(e) => e.stopPropagation()}>
-          <div className="who">Signed in as {user.email}</div>
+          <div className="who">
+            Playing as <b>{myProfile.name}</b>
+            <br />
+            {user.email}
+          </div>
+          <button
+            onClick={() => {
+              setMenu(false)
+              setRenaming(true)
+            }}
+          >
+            Change nickname
+          </button>
           <button onClick={() => logOut()}>Sign out</button>
         </div>
+      )}
+      {renaming && (
+        <Modal onClose={() => setRenaming(false)}>
+          <h2>Change nickname</h2>
+          <NicknameForm user={user} initial={myProfile.name} cta="Save" onDone={() => setRenaming(false)} />
+        </Modal>
       )}
       <div className="page">
         <div className="page-inner">

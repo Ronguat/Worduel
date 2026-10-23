@@ -22,19 +22,11 @@ export async function signIn() {
 
 export const logOut = () => signOut(auth)
 
-export function profileOf(user: User): Profile {
-  const name = user.displayName?.split(' ')[0] || user.email?.split('@')[0] || 'Player'
-  return { name, photo: user.photoURL ?? null }
-}
-
-export function saveProfile(user: User) {
-  return setDoc(doc(db, 'users', user.uid), profileOf(user), { merge: true })
-}
-
 const matchRef = (id: string) => doc(db, 'matches', id)
 
 export async function createMatch(
   user: User,
+  me: Profile,
   opts: { mode: Mode; length: WordLength; boardCount: number; hardMode: boolean },
   opponent: { uid: string; profile: Profile } | null,
   history: Match[],
@@ -45,7 +37,7 @@ export async function createMatch(
     ...opts,
     answers: opts.mode === 'faceoff' ? [] : await pickAnswers(opts.length, opts.boardCount),
     creator: user.uid,
-    creatorProfile: profileOf(user),
+    creatorProfile: me,
     now,
   })
   if (opponent) {
@@ -56,7 +48,7 @@ export async function createMatch(
   return ref.id
 }
 
-export async function joinMatch(user: User, id: string, history: Match[]) {
+export async function joinMatch(user: User, me: Profile, id: string, history: Match[]) {
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(matchRef(id))
     if (!snap.exists()) throw new Error('Match not found')
@@ -64,7 +56,7 @@ export async function joinMatch(user: User, id: string, history: Match[]) {
     if (m.players.includes(user.uid)) return
     if (m.status !== 'waiting' || m.players.length !== 1) throw new Error('This match already has two players')
     const first = nextFirstPlayer(history, m.createdBy, user.uid, m.createdBy)
-    tx.set(matchRef(id), startWith(m, user.uid, profileOf(user), first, Date.now()))
+    tx.set(matchRef(id), startWith(m, user.uid, me, first, Date.now()))
   })
 }
 

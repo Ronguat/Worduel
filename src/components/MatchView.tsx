@@ -1,5 +1,5 @@
 import type { User } from 'firebase/auth'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createMatch, deleteMatch, joinMatch, pickFaceoffWord, resignMatch, submitGuesses } from '../game/actions'
 import {
   canGuessOn,
@@ -14,7 +14,8 @@ import {
 import { loadValidWords } from '../game/words'
 import { chatReadAt, useMessages } from '../game/chat'
 import { go, useMatch, useMediaQuery, useStoredState, useToast } from '../hooks'
-import type { Match } from '../types'
+import { useNameOf } from '../profiles'
+import type { Match, Profile } from '../types'
 import { Board, boardRowCount } from './Board'
 import { Chat } from './Chat'
 import { BackButton, Header, HelpButton, ThemeButton } from './Chrome'
@@ -24,11 +25,12 @@ import { Keyboard } from './Keyboard'
 interface Props {
   id: string
   user: User
+  me: Profile
   history: Match[]
   theme: { dark: boolean; toggle: () => void }
 }
 
-export function MatchView({ id, user, history, theme }: Props) {
+export function MatchView({ id, user, me: myProfile, history, theme }: Props) {
   const match = useMatch(id)
   if (!match) {
     return (
@@ -40,7 +42,7 @@ export function MatchView({ id, user, history, theme }: Props) {
       </div>
     )
   }
-  return <Game key={id} match={match} user={user} history={history} theme={theme} />
+  return <Game key={id} match={match} user={user} myProfile={myProfile} history={history} theme={theme} />
 }
 
 const GAP = 5
@@ -68,11 +70,23 @@ interface Drafts {
   pick?: string
 }
 
-function Game({ match, user, history, theme }: { match: Match; user: User; history: Match[]; theme: Props['theme'] }) {
+function Game({
+  match,
+  user,
+  myProfile,
+  history,
+  theme,
+}: {
+  match: Match
+  user: User
+  myProfile: Profile
+  history: Match[]
+  theme: Props['theme']
+}) {
   const me = user.uid
   const isPlayer = match.players.includes(me)
   const opp = otherPlayer(match, me)
-  const nameOf = useCallback((uid: string | null) => (uid && match.profiles[uid]?.name) || 'Opponent', [match.profiles])
+  const nameOf = useNameOf(match.profiles)
   const nBoards = match.boards.length
   const multi = nBoards > 1
   const active = match.status === 'active'
@@ -250,6 +264,7 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
     try {
       const id = await createMatch(
         user,
+        myProfile,
         { mode: match.mode, length: match.length, boardCount: match.boardCount, hardMode: match.hardMode },
         { uid: opp, profile: match.profiles[opp] },
         history,
@@ -279,7 +294,7 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
   const join = async () => {
     setBusy(true)
     try {
-      await joinMatch(user, match.id, history)
+      await joinMatch(user, myProfile, match.id, history)
     } catch (e) {
       showToast((e as Error).message, 3000)
     } finally {
