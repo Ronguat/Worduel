@@ -53,6 +53,15 @@ export interface Match {
   result: 'won' | 'lost' | 'draw' | null
   endReason: 'solved' | 'failed' | 'resigned' | null
   lastMove: { by: string; at: number } | null
+  /** most recent chat message, so the lobby can flag unread chat */
+  lastChat?: { by: string; at: number }
+}
+
+export interface ChatMessage {
+  id: string
+  by: string
+  text: string
+  at: number
 }
 
 export interface GuessEntry {

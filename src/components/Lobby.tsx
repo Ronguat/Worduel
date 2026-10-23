@@ -1,6 +1,7 @@
 import type { User } from 'firebase/auth'
 import { useState } from 'react'
 import { logOut } from '../game/actions'
+import { hasUnreadChat } from '../game/chat'
 import { faceoffBoards, needsMe, otherPlayer } from '../game/logic'
 import { go } from '../hooks'
 import type { Match } from '../types'
@@ -59,7 +60,14 @@ function MatchCard({ m, me }: { m: Match; me: string }) {
   return (
     <button className="card" onClick={() => go(`/m/${m.id}`)}>
       <div className="grow">
-        <div className="line1">{title}</div>
+        <div className="line1">
+          {title}
+          {hasUnreadChat(m, me) && (
+            <span className="unread-dot" title="Unread chat">
+              💬
+            </span>
+          )}
+        </div>
         <div className="line2">
           {describe(m)} · {progress} · {ago(m.updatedAt)}
         </div>

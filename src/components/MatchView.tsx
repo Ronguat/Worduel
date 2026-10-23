@@ -12,9 +12,11 @@ import {
   otherPlayer,
 } from '../game/logic'
 import { loadValidWords } from '../game/words'
-import { go, useMatch, useStoredState, useToast } from '../hooks'
+import { chatReadAt, useMessages } from '../game/chat'
+import { go, useMatch, useMediaQuery, useStoredState, useToast } from '../hooks'
 import type { Match } from '../types'
 import { Board, boardRowCount } from './Board'
+import { Chat } from './Chat'
 import { BackButton, Header, HelpButton, ThemeButton } from './Chrome'
 import { describe } from './Lobby'
 import { Keyboard } from './Keyboard'
@@ -94,6 +96,13 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
   const [busy, setBusy] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [toast, showToast] = useToast()
+
+  const chatEnabled = isPlayer && !!opp
+  const wide = useMediaQuery('(min-width: 900px)')
+  const [chatOpen, setChatOpen] = useState(false)
+  const messages = useMessages(match.id, chatEnabled)
+  const lastMsg = messages[messages.length - 1]
+  const unread = !wide && !chatOpen && !!lastMsg && lastMsg.by !== me && lastMsg.at > chatReadAt(match.id)
 
   // Remember what has been revealed so new guesses (including ones made while you were away) flip in.
   const countsKey = counts.join(',')
@@ -195,7 +204,7 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      if ((e.target as HTMLElement)?.tagName === 'INPUT') return
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return
       if (e.key === 'Enter' || e.key === 'Backspace') {
         e.preventDefault()
         onKeyRef.current(e.key)
@@ -366,6 +375,7 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
   if (match.status === 'waiting' && match.createdBy === me) menuItems.push(['Delete invite', doDelete])
 
   return (
+    <div className="match-layout">
     <div className="screen" onClick={() => menuOpen && setMenuOpen(false)}>
       <Header
         left={
@@ -377,6 +387,12 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
         right={
           <>
             <ThemeButton {...theme} />
+            {chatEnabled && !wide && (
+              <button className="icon-btn badge-wrap" onClick={() => setChatOpen(true)} aria-label="Open chat">
+                💬
+                {unread && <span className="badge" />}
+              </button>
+            )}
             {menuItems.length > 0 && (
               <button
                 className="icon-btn"
@@ -491,6 +507,16 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
           {toast.text}
         </div>
       )}
+    </div>
+    {chatEnabled && (wide || chatOpen) && (
+      <Chat
+        matchId={match.id}
+        me={me}
+        opponentName={nameOf(opp)}
+        messages={messages}
+        onClose={wide ? undefined : () => setChatOpen(false)}
+      />
+    )}
     </div>
   )
 }

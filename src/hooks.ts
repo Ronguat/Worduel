@@ -101,3 +101,16 @@ export function useStoredState<T>(key: string, initial: T) {
   }, [key, value])
   return [value, setValue] as const
 }
+
+export function useMediaQuery(q: string) {
+  const [matches, setMatches] = useState(() => window.matchMedia?.(q).matches ?? false)
+  useEffect(() => {
+    const mq = window.matchMedia?.(q)
+    if (!mq) return
+    const on = () => setMatches(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [q])
+  return matches
+}
