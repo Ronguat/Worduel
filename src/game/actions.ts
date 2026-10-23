@@ -2,7 +2,7 @@ import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, type 
 import { collection, deleteDoc, doc, runTransaction, setDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import type { GuessEntry, Match, Mode, Profile, WordLength } from '../types'
-import { applyGuesses, endTurn, newMatchData, nextFirstPlayer, resign, setFaceoffWord, startWith, type ApplyResult } from './logic'
+import { applyGuesses, newMatchData, nextFirstPlayer, resign, setFaceoffWord, startWith, type ApplyResult } from './logic'
 import { loadValidWords, pickAnswers } from './words'
 
 export async function signIn() {
@@ -84,8 +84,6 @@ export async function submitGuesses(uid: string, matchId: string, length: WordLe
   const words = await loadValidWords(length)
   await transact(matchId, (m) => applyGuesses(m, uid, entries, (w) => words.has(w), Date.now()))
 }
-
-export const endTurnAction = (uid: string, matchId: string) => transact(matchId, (m) => endTurn(m, uid, Date.now()))
 
 export async function pickFaceoffWord(uid: string, matchId: string, length: WordLength, word: string) {
   const words = await loadValidWords(length)

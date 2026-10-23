@@ -114,7 +114,7 @@ export function NewMatch({ user, history }: { user: User; history: Match[] }) {
               {boardCount === 1
                 ? 'One puzzle.'
                 : mode === 'duel'
-                  ? `${boardCount} separate puzzles. Each turn, guess once on as many as you like. Most boards won takes the match.`
+                  ? `${boardCount} separate puzzles, each taking turns on its own. Most boards won takes the match.`
                   : `${boardCount} separate puzzles. Solve them all to win.`}
             </div>
           </div>

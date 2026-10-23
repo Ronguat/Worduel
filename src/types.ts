@@ -43,7 +43,7 @@ export interface Match {
   status: 'waiting' | 'active' | 'finished'
   /** duel only */
   firstPlayer: string | null
-  /** duel only: whose turn it is */
+  /** unused since duels moved to per-board turns (see boardTurn); kept for older matches */
   turn: string | null
   turnCount: number
   boards: BoardState[]

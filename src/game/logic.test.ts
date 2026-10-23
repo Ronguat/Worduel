@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGuesses, decodeAnswer, duelWinner, encodeAnswer, endTurn, hardModeViolation, needsMe, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith } from './logic'
+import { applyGuesses, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, needsMe, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith } from './logic'
 import type { Match } from '../types'
 
 const valid = () => true
@@ -44,41 +44,50 @@ describe('duel', () => {
     const r2 = applyGuesses(m, 'a', [{ board: 0, word: 'slate' }], valid, 1)
     if (!r2.ok) throw new Error(r2.error)
     m = r2.match
-    expect(m.turn).toBe('b')
+    expect(boardTurn(m, 0)).toBe('b')
     const r3 = applyGuesses(m, 'b', [{ board: 0, word: 'crane' }], valid, 2)
     if (!r3.ok) throw new Error(r3.error)
     expect(r3.match.status).toBe('finished')
     expect(r3.match.winner).toBe('b')
   })
 
-  it('lets a turn cover any subset of boards, one guess at a time', () => {
+  it('gives each board its own turns', () => {
     const m = makeMatch('duel', ['crane', 'slate', 'pious'])
-    const r1 = applyGuesses(m, 'a', [{ board: 0, word: 'crane' }], valid, 1)
-    if (!r1.ok) throw new Error(r1.error)
-    expect(r1.match.boards[0].solvedBy).toBe('a')
-    expect(r1.match.turn).toBe('a')
-    const r2 = applyGuesses(r1.match, 'a', [{ board: 2, word: 'adieu' }], valid, 2)
-    if (!r2.ok) throw new Error(r2.error)
-    expect(r2.match.boards.map((b) => b.guesses.length)).toEqual([1, 0, 1])
-    expect(r2.match.turn).toBe('a')
-    expect(applyGuesses(r2.match, 'a', [{ board: 2, word: 'stout' }], valid, 3).ok).toBe(false)
-    const ended = endTurn(r2.match, 'a', 3)
-    if (!ended.ok) throw new Error(ended.error)
-    expect(ended.match.turn).toBe('b')
-    expect(applyGuesses(ended.match, 'b', [{ board: 0, word: 'crane' }], valid, 4).ok).toBe(false)
-    const r3 = applyGuesses(ended.match, 'b', [{ board: 2, word: 'stout' }], valid, 4)
-    if (!r3.ok) throw new Error(r3.error)
-    expect(r3.match.turn).toBe('b')
-  })
+    // first moves alternate across boards
+    expect([0, 1, 2].map((i) => boardTurn(m, i))).toEqual(['a', 'b', 'a'])
+    expect(needsMe(m, 'a') && needsMe(m, 'b')).toBe(true)
+    expect(applyGuesses(m, 'a', [{ board: 1, word: 'adieu' }], valid, 1).ok).toBe(false)
 
-  it('passes the turn automatically once every open board has a guess', () => {
-    const m = makeMatch('duel', ['crane', 'slate'])
-    expect(endTurn(m, 'a', 1).ok).toBe(false)
     const r1 = applyGuesses(m, 'a', [{ board: 0, word: 'adieu' }], valid, 1)
     if (!r1.ok) throw new Error(r1.error)
-    const r2 = applyGuesses(r1.match, 'a', [{ board: 1, word: 'adieu' }], valid, 2)
+    expect(boardTurn(r1.match, 0)).toBe('b')
+    expect(boardTurn(r1.match, 2)).toBe('a')
+    expect(applyGuesses(r1.match, 'a', [{ board: 0, word: 'stout' }], valid, 2).ok).toBe(false)
+
+    const r2 = applyGuesses(r1.match, 'a', [{ board: 2, word: 'pious' }], valid, 2)
     if (!r2.ok) throw new Error(r2.error)
-    expect(r2.match.turn).toBe('b')
+    expect(r2.match.boards[2].solvedBy).toBe('a')
+    expect(needsMe(r2.match, 'a')).toBe(false)
+
+    const r3 = applyGuesses(r2.match, 'b', [{ board: 1, word: 'stout' }], valid, 3)
+    if (!r3.ok) throw new Error(r3.error)
+    expect(boardTurn(r3.match, 0)).toBe('b')
+    expect(boardTurn(r3.match, 1)).toBe('a')
+    expect(needsMe(r3.match, 'a')).toBe(true)
+  })
+
+  it('works out turns for matches made before per-board turns', () => {
+    // you: STARE (board 1), them: MASKS (board 1), you: BREAK (board 2)
+    const m = makeMatch('duel', ['mangs', 'freak'])
+    m.boards[0].guesses = [
+      { w: 'stare', by: 'a', turn: 0, at: 0 },
+      { w: 'masks', by: 'b', turn: 1, at: 0 },
+    ]
+    m.boards[1].guesses = [{ w: 'break', by: 'a', turn: 2, at: 0 }]
+    m.turnCount = 3
+    m.turn = 'b'
+    expect(boardTurn(m, 0)).toBe('a')
+    expect(boardTurn(m, 1)).toBe('b')
   })
 
   it('applies hard mode to hints revealed by either player', () => {

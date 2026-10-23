@@ -1,11 +1,10 @@
 import type { User } from 'firebase/auth'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createMatch, deleteMatch, endTurnAction, joinMatch, pickFaceoffWord, resignMatch, submitGuesses } from '../game/actions'
+import { createMatch, deleteMatch, joinMatch, pickFaceoffWord, resignMatch, submitGuesses } from '../game/actions'
 import {
   canGuessOn,
   decodeAnswer,
   faceoffBoards,
-  guessedThisTurn,
   hardModeViolation,
   isOpen,
   keyboardStatus,
@@ -175,9 +174,11 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
       else if (/^[a-z]$/.test(key) && pick.length < match.length) setPick(pick + key)
       return
     }
-    if (match.mode === 'duel' && match.turn !== me) return showToast(`It's ${nameOf(opp)}'s turn`)
     const b = selected
     if (!typeable[b]) {
+      if (match.mode === 'duel' && isOpen(match.boards[b])) {
+        return showToast(multi ? `It's ${nameOf(opp)}'s move on this board` : `It's ${nameOf(opp)}'s turn`)
+      }
       if (fo?.mine && !fo.mine.a) showToast(`Waiting for ${nameOf(opp)} to pick your word`)
       else if (fo?.mine?.solvedBy) showToast(`Waiting for ${nameOf(opp)} to finish`)
       else if (match.mode === 'duel' && isOpen(match.boards[b])) showToast('You already guessed on this board this turn')
@@ -306,13 +307,16 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
     banner = resultText(match, me, nameOf)
   } else if (match.mode === 'duel') {
     const score = multi && opp ? `You ${solvedBy(me)} · ${nameOf(opp)} ${solvedBy(opp)}` : null
-    if (!isPlayer) banner = `${nameOf(match.turn)}'s turn`
+    const myBoards = typeable.filter(Boolean).length
+    if (!isPlayer) banner = 'Duel in progress'
     else if (myTurn) {
       bannerClass += ' your-turn'
       banner = (
         <>
           Your turn
-          <span className="sub">{multi ? `Guess on any boards, then end your turn · ${score}` : score}</span>
+          <span className="sub">
+            {multi ? `Your move on ${myBoards} of ${match.boards.filter(isOpen).length} boards · ${score}` : score}
+          </span>
         </>
       )
     } else {
@@ -451,21 +455,6 @@ function Game({ match, user, history, theme }: { match: Match; user: User; histo
 
       {active && isPlayer && (
         <>
-          {match.mode === 'duel' && multi && match.turn === me && (
-            <div className="submit-bar">
-              <span>
-                Guessed on {match.boards.filter((b) => guessedThisTurn(match, b)).length} of{' '}
-                {match.boards.filter((b) => isOpen(b)).length} boards
-              </span>
-              <button
-                className="btn"
-                disabled={busy || !match.boards.some((b) => guessedThisTurn(match, b))}
-                onClick={() => run(() => endTurnAction(me, match.id))}
-              >
-                End turn
-              </button>
-            </div>
-          )}
           {mustPick && (
             <div className="pick">
               <div className={`row ${shake === -1 ? 'shake' : ''}`} style={{ '--tile': '44px' } as React.CSSProperties}>

@@ -97,11 +97,11 @@ function Help({ onClose }: { onClose: () => void }) {
       <ul>
         <li>You take turns guessing on a shared board. There's no guess limit; whoever lands the word wins it.</li>
         <li>
-          With several boards, each board is its own puzzle. On your turn you can make one guess on any of them, one
-          board at a time, then tap End turn (it ends by itself once you've guessed on every board). Most boards won
-          takes the match (ties go to fewer rows used, then to whoever went second).
+          With several boards, each board is its own puzzle with its own turns: whoever didn't guess last on a board
+          is up there. Guess on any board where it's your move, whenever you like. Most boards won takes the match
+          (ties go to fewer rows used, then to whoever moved second on board 1).
         </li>
-        <li>Who goes first alternates from match to match.</li>
+        <li>Who moves first alternates from board to board and from match to match.</li>
       </ul>
       <h3>Face-off</h3>
       <ul>

@@ -1,4 +1,4 @@
-import { DUEL_VISIBLE_ROWS, decodeAnswer, guessedThisTurn, isOpen, score } from '../game/logic'
+import { DUEL_VISIBLE_ROWS, boardTurn, decodeAnswer, isOpen, score } from '../game/logic'
 import type { Match, Mark } from '../types'
 
 const MIN_OPEN_ENDED_ROWS = 6
@@ -73,15 +73,16 @@ export function Board({ match, index, me, draft, seen, selected, canType, expand
     status = `✓ ${board.solvedBy === me ? 'You' : nameOf(board.solvedBy)}`
   } else if (board.failed && !revealing) {
     status = '✗ Out of guesses'
-  } else if (match.mode === 'duel' && active && match.turn === me && guessedThisTurn(match, board)) {
-    status = 'Guessed this turn'
+  } else if (match.mode === 'duel' && active && match.boards.length > 1) {
+    const turn = boardTurn(match, index)
+    status = turn === me ? 'Your move' : `${nameOf(turn ?? '')}'s move`
   } else if (match.mode === 'team' && match.maxGuesses) {
     status = `${match.maxGuesses - n} left`
   } else if (n > 0) {
     status = guessCount
   }
 
-  const spent = !isOpen(board) || (match.mode === 'duel' && match.turn === me && guessedThisTurn(match, board))
+  const spent = !isOpen(board) || (match.mode === 'duel' && boardTurn(match, index) !== me)
   const classes = ['board', selected && multi && canType ? 'selected' : '', active && spent ? 'done' : ''].join(' ')
   return (
     <div className={classes} onClick={onSelect}>
