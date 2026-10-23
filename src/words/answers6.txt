@@ -159,7 +159,6 @@ appeal
 appear
 append
 apples
-approx
 aprons
 arable
 arcade

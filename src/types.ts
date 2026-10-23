@@ -1,5 +1,5 @@
 export type Mode = 'duel' | 'team' | 'faceoff'
-export type WordLength = 5 | 6
+export type WordLength = 4 | 5 | 6
 export type Mark = 'correct' | 'present' | 'absent'
 
 export interface Profile {

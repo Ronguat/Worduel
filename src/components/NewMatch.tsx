@@ -93,7 +93,7 @@ export function NewMatch({ user, me, history }: { user: User; me: Profile; histo
           <div className="field">
             <label>Word length</label>
             <div className="segmented">
-              {([5, 6] as const).map((n) => (
+              {([4, 5, 6] as const).map((n) => (
                 <button key={n} aria-pressed={length === n} onClick={() => set({ length: n })}>
                   {n} letters
                 </button>

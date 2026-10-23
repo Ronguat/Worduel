@@ -3,7 +3,7 @@ import type { BoardState, GuessEntry, Mark, Match, Mode, WordLength } from '../t
 export const DUEL_VISIBLE_ROWS = 8
 
 export function teamMaxGuesses(length: WordLength) {
-  return length === 5 ? 6 : 7
+  return length === 6 ? 7 : 6
 }
 
 export function encodeAnswer(word: string) {

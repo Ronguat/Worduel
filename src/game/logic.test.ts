@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGuesses, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, needsMe, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith } from './logic'
+import { applyGuesses, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, needsMe, teamMaxGuesses, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith } from './logic'
 import type { Match } from '../types'
 
 const valid = () => true
@@ -27,6 +27,23 @@ describe('hard mode', () => {
     expect(hardModeViolation('plaid', 'crane', ['crisp'])).toBe('1st letter must be C')
     expect(hardModeViolation('candy', 'crane', ['opera'])).toBe('Guess must contain E')
     expect(hardModeViolation('crane', 'crane', ['trace', 'opera'])).toBeNull()
+  })
+})
+
+describe('team guess limits', () => {
+  it('gives 6 guesses for 4 and 5 letters, 7 for 6', () => {
+    expect([4, 5, 6].map((n) => teamMaxGuesses(n as 4 | 5 | 6))).toEqual([6, 6, 7])
+  })
+  it('plays a four-letter board', () => {
+    const base = newMatchData({ mode: 'duel', length: 4, boardCount: 1, hardMode: true, answers: ['fate'], creator: 'a', creatorProfile: { name: 'A', photo: null }, now: 0 })
+    let m: Match = { id: 'm', ...startWith(base, 'b', { name: 'B', photo: null }, 'a', 0) }
+    const r1 = applyGuesses(m, 'a', [{ board: 0, word: 'gate' }], valid, 1)
+    if (!r1.ok) throw new Error(r1.error)
+    m = r1.match
+    expect(applyGuesses(m, 'b', [{ board: 0, word: 'fish' }], valid, 2).ok).toBe(false) // hard mode: _ATE
+    const r2 = applyGuesses(m, 'b', [{ board: 0, word: 'fate' }], valid, 2)
+    if (!r2.ok) throw new Error(r2.error)
+    expect(r2.match.winner).toBe('b')
   })
 })
 
