@@ -18,8 +18,10 @@ function ago(t: number) {
   return new Date(t).toLocaleDateString()
 }
 
+export const MODE_NAMES = { duel: 'Duel', team: 'Team', faceoff: 'Face-off' } as const
+
 export function describe(m: Match) {
-  const mode = { duel: 'Duel', team: 'Team', faceoff: 'Face-off' }[m.mode]
+  const mode = MODE_NAMES[m.mode]
   return [mode, `${m.length} letters`, m.boardCount > 1 ? `${m.boardCount} boards` : null, m.hardMode ? 'Hard' : null]
     .filter(Boolean)
     .join(' · ')

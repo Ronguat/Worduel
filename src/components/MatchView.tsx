@@ -19,7 +19,7 @@ import type { Match, Profile } from '../types'
 import { Board, boardRowCount } from './Board'
 import { Chat } from './Chat'
 import { BackButton, Header, HelpButton, ThemeButton } from './Chrome'
-import { describe } from './Lobby'
+import { MODE_NAMES, describe } from './Lobby'
 import { Keyboard } from './Keyboard'
 
 interface Props {
@@ -433,6 +433,9 @@ function Game({
         </div>
       )}
       <div className={bannerClass}>{banner}</div>
+      <div className="match-meta">
+        {MODE_NAMES[match.mode]} · {match.length} letters · {match.hardMode ? <b>Hard mode</b> : 'Hard mode off'}
+      </div>
 
       <div className="boards-area" ref={areaRef}>
         <div
