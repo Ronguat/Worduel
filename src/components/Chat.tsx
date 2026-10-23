@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MAX_CHAT_LENGTH, markChatRead, replyRef, sendMessage } from '../game/chat'
 import { hasFormatting } from '../game/markdown'
 import { useStoredState } from '../hooks'
@@ -36,7 +36,7 @@ export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null)
   const [flashId, setFlashId] = useState<string | null>(null)
   const listRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const pressTimer = useRef<number>()
   const nameOf = (uid: string) => (uid === me ? 'You' : opponentName)
 
@@ -71,6 +71,14 @@ export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
     setFlashId(id)
     window.setTimeout(() => setFlashId((f) => (f === id ? null : f)), 1400)
   }
+
+  // Grow the message box with its text, up to the max-height in CSS.
+  useLayoutEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + 2}px`
+  }, [text])
 
   const last = messages[messages.length - 1]
   useEffect(() => {
@@ -198,9 +206,10 @@ export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
         <button type="button" className="icon-btn" onClick={() => setPicker((p) => !p)} aria-label="Emoji">
           😀
         </button>
-        <input
+        <textarea
           ref={inputRef}
           value={text}
+          rows={1}
           maxLength={MAX_CHAT_LENGTH}
           placeholder={replyTo ? 'Reply' : 'Message'}
           enterKeyHint="send"
@@ -209,6 +218,10 @@ export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
             if (e.key === 'Escape' && replyTo) {
               e.preventDefault()
               setReplyTo(null)
+            } else if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              // Enter sends; Shift+Enter adds a line break
+              e.preventDefault()
+              void send()
             }
           }}
         />
