@@ -11,6 +11,7 @@ import {
   keyboardStatus,
   needsMe,
   otherPlayer,
+  progress,
 } from '../game/logic'
 import { loadValidWords } from '../game/words'
 import { chatReadAt, useMessages } from '../game/chat'
@@ -32,7 +33,15 @@ interface Props {
 }
 
 export function MatchView({ id, user, me: myProfile, history, theme }: Props) {
-  const match = useMatch(id)
+  const live = useMatch(id)
+  // The copy of the match our own last action wrote. Shown until the live update catches up, so a
+  // move never seems to vanish if the live connection stalls (common on phones after backgrounding).
+  const [saved, setSaved] = useState<Match | null>(null)
+  const savedIsNewer = !!saved && saved.id === id && (!live || progress(saved) > progress(live))
+  useEffect(() => {
+    if (saved && !savedIsNewer) setSaved(null)
+  }, [saved, savedIsNewer])
+  const match = savedIsNewer ? saved : live
   if (!match) {
     return (
       <div className="screen">
@@ -43,7 +52,7 @@ export function MatchView({ id, user, me: myProfile, history, theme }: Props) {
       </div>
     )
   }
-  return <Game key={id} match={match} user={user} myProfile={myProfile} history={history} theme={theme} />
+  return <Game key={id} match={match} user={user} myProfile={myProfile} history={history} theme={theme} onSaved={setSaved} />
 }
 
 const GAP = 5
@@ -77,12 +86,14 @@ function Game({
   myProfile,
   history,
   theme,
+  onSaved,
 }: {
   match: Match
   user: User
   myProfile: Profile
   history: Match[]
   theme: Props['theme']
+  onSaved: (m: Match) => void
 }) {
   const me = user.uid
   const isPlayer = match.players.includes(me)
@@ -160,10 +171,11 @@ function Game({
   }
 
   /** Runs a server action, reporting failures as a toast. Resolves true on success. */
-  const run = async (action: () => Promise<void>) => {
+  const run = async (action: () => Promise<Match | null | void>) => {
     setBusy(true)
     try {
-      await action()
+      const written = await action()
+      if (written) onSaved(written)
       return true
     } catch (e) {
       showToast((e as Error).message || 'Something went wrong', 3000)
@@ -298,7 +310,8 @@ function Game({
   const join = async () => {
     setBusy(true)
     try {
-      await joinMatch(user, myProfile, match.id, history)
+      const written = await joinMatch(user, myProfile, match.id, history)
+      if (written) onSaved(written)
     } catch (e) {
       showToast((e as Error).message, 3000)
     } finally {
@@ -311,7 +324,7 @@ function Game({
     const q = match.mode === 'team' ? 'Give up? This counts as a team loss.' : `Resign? ${nameOf(opp)} will win this match.`
     if (!confirm(q)) return
     try {
-      await resignMatch(me, match.id)
+      onSaved(await resignMatch(me, match.id))
     } catch (e) {
       showToast((e as Error).message, 3000)
     }

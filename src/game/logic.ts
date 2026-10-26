@@ -146,6 +146,16 @@ export function faceoffOutcome(match: Match): { winner: string | null; draw: boo
   return null
 }
 
+/**
+ * How far along a match is. Every action (join, pick, guess, reveal, finish) increases it,
+ * so a newer copy of a match can be told apart from an older one without trusting clocks.
+ */
+export function progress(m: Match) {
+  let n = m.players.length + (m.status === 'finished' ? 1 : 0)
+  for (const b of m.boards) n += b.guesses.length * 4 + (b.a ? 1 : 0) + (b.failed ? 1 : 0) + (b.solvedBy ? 1 : 0)
+  return n
+}
+
 export type ApplyResult = { ok: true; match: Match } | { ok: false; error: string }
 
 /** Validates and applies one player's guesses. Pure: returns a new match object. */

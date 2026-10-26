@@ -57,51 +57,49 @@ export async function createMatch(
   return ref.id
 }
 
-export async function joinMatch(user: User, me: Profile, id: string, history: Match[]) {
-  await runTransaction(db, async (tx) => {
+// Each action resolves with the match as written, so the screen can show it right away
+// even if the live update is slow to arrive (e.g. a phone resuming from the background).
+
+export async function joinMatch(user: User, me: Profile, id: string, history: Match[]): Promise<Match | null> {
+  return runTransaction(db, async (tx) => {
     const snap = await tx.get(matchRef(id))
     if (!snap.exists()) throw new Error('Match not found')
     const m = snap.data() as Omit<Match, 'id'>
-    if (m.players.includes(user.uid)) return
+    if (m.players.includes(user.uid)) return null
     if (m.status !== 'waiting' || m.players.length !== 1) throw new Error('This match already has two players')
     const first = nextFirstPlayer(history, m.createdBy, user.uid, m.createdBy)
-    tx.set(matchRef(id), startWith(m, user.uid, me, first, Date.now()))
+    const data = startWith(m, user.uid, me, first, Date.now())
+    tx.set(matchRef(id), data)
+    return { id, ...data }
   })
 }
 
 /** Reads the match, applies `update`, and writes the result, all in one transaction. */
-async function transact(matchId: string, update: (m: Match) => ApplyResult) {
-  await runTransaction(db, async (tx) => {
+function transact(matchId: string, update: (m: Match) => ApplyResult): Promise<Match> {
+  return runTransaction(db, async (tx) => {
     const snap = await tx.get(matchRef(matchId))
     if (!snap.exists()) throw new Error('Match not found')
     const result = update({ id: matchId, ...(snap.data() as Omit<Match, 'id'>) })
     if (!result.ok) throw new Error(result.error)
     const { id: _id, ...data } = result.match
     tx.set(matchRef(matchId), data)
+    return result.match
   })
 }
 
 export async function submitGuesses(uid: string, matchId: string, length: WordLength, entries: GuessEntry[]) {
   const words = await loadValidWords(length)
-  await transact(matchId, (m) => applyGuesses(m, uid, entries, (w) => words.has(w), Date.now()))
+  return transact(matchId, (m) => applyGuesses(m, uid, entries, (w) => words.has(w), Date.now()))
 }
 
 export async function pickFaceoffWord(uid: string, matchId: string, length: WordLength, word: string) {
   const words = await loadValidWords(length)
-  await transact(matchId, (m) => setFaceoffWord(m, uid, word, (w) => words.has(w), Date.now()))
+  return transact(matchId, (m) => setFaceoffWord(m, uid, word, (w) => words.has(w), Date.now()))
 }
 
 export const revealWord = (uid: string, matchId: string) => transact(matchId, (m) => revealFaceoffWord(m, uid, Date.now()))
 
-export async function resignMatch(uid: string, matchId: string) {
-  await runTransaction(db, async (tx) => {
-    const snap = await tx.get(matchRef(matchId))
-    if (!snap.exists()) throw new Error('Match not found')
-    const m = { id: matchId, ...(snap.data() as Omit<Match, 'id'>) }
-    if (m.status !== 'active') return
-    const { id: _id, ...data } = resign(m, uid, Date.now())
-    tx.set(matchRef(matchId), data)
-  })
-}
+export const resignMatch = (uid: string, matchId: string) =>
+  transact(matchId, (m) => (m.status === 'active' ? { ok: true, match: resign(m, uid, Date.now()) } : { ok: true, match: m }))
 
 export const deleteMatch = (id: string) => deleteDoc(matchRef(id))
