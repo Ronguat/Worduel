@@ -263,8 +263,18 @@ function Game({
   const hasEarlier = match.mode !== 'team' && counts.some((c) => c > 8)
   const { tile, cols } = layout(area.w, area.h, Math.max(1, nBoards), match.length, rowCount, (multi ? 18 : 0) + (hasEarlier ? 20 : 0))
 
-  // The keyboard reflects the board you're guessing on (in face-off, always your own).
-  const keyIndex = fo?.mine ? match.boards.indexOf(fo.mine) : selected
+  // The keyboard reflects the board you're guessing on. In face-off that's your own, until you've finished
+  // (and watched your last guess flip in); then it follows your opponent's board while they're still going.
+  const mineIndex = fo?.mine ? match.boards.indexOf(fo.mine) : -1
+  const theirIndex = fo?.theirs ? match.boards.indexOf(fo.theirs) : -1
+  const followTheirs =
+    !!fo?.mine &&
+    !!fo.theirs?.a &&
+    !isOpen(fo.mine) &&
+    counts[mineIndex] <= (seen[mineIndex] ?? 0) &&
+    isOpen(fo.theirs) &&
+    (active || isPlayingOn(match, fo.theirs))
+  const keyIndex = followTheirs ? theirIndex : fo?.mine ? mineIndex : selected
   const keyBoard = match.boards[keyIndex]
   const marks = useMemo(
     () =>
@@ -513,7 +523,7 @@ function Game({
           </div>
         ))}
 
-      {(active || myPlayOn) && isPlayer && (
+      {(active || myPlayOn || followTheirs) && isPlayer && (
         <>
           {mustPick && (
             <div className="pick">
@@ -527,7 +537,8 @@ function Game({
               <div className="hint">Type their word and press Enter. They won't see it until the end.</div>
             </div>
           )}
-          <Keyboard marks={marks} disabled={!mustPick && !typeable.some(Boolean)} onKey={onKey} />
+          {followTheirs && <div className="kb-caption">Keyboard shows {nameOf(opp)}'s guesses</div>}
+          <Keyboard marks={marks} disabled={!mustPick && !followTheirs && !typeable.some(Boolean)} onKey={onKey} />
         </>
       )}
 

@@ -408,6 +408,13 @@ button {
   background: var(--correct);
   color: #fff;
 }
+.kb-caption {
+  flex: none;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding-top: 4px;
+}
 .keyboard.disabled .key {
   opacity: 0.6;
 }
