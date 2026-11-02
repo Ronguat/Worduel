@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGuesses, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, isPlayingOn, needsMe, revealFaceoffWord, teamMaxGuesses, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith } from './logic'
+import { applyGuesses, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, isPlayingOn, needsMe, revealFaceoffWord, teamMaxGuesses, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith, wantsAttention } from './logic'
 import type { Match } from '../types'
 
 const valid = () => true
@@ -155,6 +155,24 @@ describe('team', () => {
     const r2 = applyGuesses(r1.match, 'a', [{ board: 1, word: 'slate' }], valid, 2)
     if (!r2.ok) throw new Error(r2.error)
     expect(r2.match.result).toBe('won')
+  })
+})
+
+describe('wants attention', () => {
+  it('flags a team match after the teammate moves, not after your own move', () => {
+    const m = makeMatch('team', ['crane'])
+    expect(wantsAttention(m, 'a')).toBe(false) // you started it
+    expect(wantsAttention(m, 'b')).toBe(true) // your teammate started it
+    const r = applyGuesses(m, 'b', [{ board: 0, word: 'slate' }], valid, 1)
+    if (!r.ok) throw new Error(r.error)
+    expect(wantsAttention(r.match, 'a')).toBe(true)
+    expect(wantsAttention(r.match, 'b')).toBe(false)
+  })
+
+  it('flags a new face-off for both players until they pick a word', () => {
+    const m = makeMatch('faceoff', [])
+    expect(wantsAttention(m, 'a')).toBe(true)
+    expect(wantsAttention(m, 'b')).toBe(true)
   })
 })
 

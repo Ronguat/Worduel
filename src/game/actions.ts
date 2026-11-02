@@ -33,14 +33,10 @@ export const logOut = () => signOut(auth)
 
 const matchRef = (id: string) => doc(db, 'matches', id)
 
-export async function createMatch(
-  user: User,
-  me: Profile,
-  opts: { mode: Mode; length: WordLength; boardCount: number; hardMode: boolean },
-  opponent: { uid: string; profile: Profile } | null,
-  history: Match[],
-) {
-  const ref = doc(collection(db, 'matches'))
+type MatchOptions = { mode: Mode; length: WordLength; boardCount: number; hardMode: boolean }
+type Opponent = { uid: string; profile: Profile }
+
+async function buildMatch(user: User, me: Profile, opts: MatchOptions, opponent: Opponent | null, history: Match[]) {
   const now = Date.now()
   let data = newMatchData({
     ...opts,
@@ -53,8 +49,32 @@ export async function createMatch(
     const first = nextFirstPlayer(history, user.uid, opponent.uid, user.uid)
     data = startWith(data, opponent.uid, opponent.profile, first, now)
   }
-  await setDoc(ref, data)
+  return data
+}
+
+export async function createMatch(user: User, me: Profile, opts: MatchOptions, opponent: Opponent | null, history: Match[]) {
+  const ref = doc(collection(db, 'matches'))
+  await setDoc(ref, await buildMatch(user, me, opts, opponent, history))
   return ref.id
+}
+
+/**
+ * Starts a rematch of a finished match and links it from the old one, or returns the rematch the other
+ * player already started, so both pressing Rematch end up in the same match. Classic duels rematch as duels
+ * (the 'faceoff' mode).
+ */
+export async function startRematch(user: User, me: Profile, old: Match, opponent: Opponent, history: Match[]) {
+  const mode = old.mode === 'duel' ? 'faceoff' : old.mode
+  const data = await buildMatch(user, me, { mode, length: old.length, hardMode: old.hardMode, boardCount: 1 }, opponent, history)
+  const ref = doc(collection(db, 'matches'))
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(matchRef(old.id))
+    const existing = (snap.data() as Match | undefined)?.rematch
+    if (existing) return existing.id
+    tx.set(ref, data)
+    tx.update(matchRef(old.id), { rematch: { id: ref.id, by: user.uid } })
+    return ref.id
+  })
 }
 
 // Each action resolves with the match as written, so the screen can show it right away

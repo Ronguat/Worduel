@@ -1,6 +1,6 @@
 import type { User } from 'firebase/auth'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { createMatch, deleteMatch, joinMatch, pickFaceoffWord, resignMatch, revealWord, submitGuesses } from '../game/actions'
+import { deleteMatch, joinMatch, pickFaceoffWord, resignMatch, revealWord, startRematch, submitGuesses } from '../game/actions'
 import {
   canGuessOn,
   decodeAnswer,
@@ -12,6 +12,7 @@ import {
   needsMe,
   otherPlayer,
   progress,
+  wantsAttention,
 } from '../game/logic'
 import { loadValidWords } from '../game/words'
 import { chatReadAt, useMessages } from '../game/chat'
@@ -33,7 +34,9 @@ interface Props {
 }
 
 export function MatchView({ id, user, me: myProfile, history, theme }: Props) {
-  const live = useMatch(id)
+  const loaded = useMatch(id)
+  // Right after moving to another match (e.g. Go to rematch) the hook still holds the previous one for a render.
+  const live = loaded && loaded.id !== id ? undefined : loaded
   // The copy of the match our own last action wrote. Shown until the live update catches up, so a
   // move never seems to vanish if the live connection stalls (common on phones after backgrounding).
   const [saved, setSaved] = useState<Match | null>(null)
@@ -284,18 +287,15 @@ function Game({
     [mustPick, keyBoard, seen, keyIndex],
   )
 
+  // Another match is waiting on you; flagged on the back arrow.
+  const elsewhere = history.some((m) => m.id !== match.id && wantsAttention(m, me))
+
   const rematch = async () => {
     if (!opp) return
+    if (match.rematch) return go(`/m/${match.rematch.id}`)
     setBusy(true)
     try {
-      const id = await createMatch(
-        user,
-        myProfile,
-        { mode: match.mode, length: match.length, boardCount: 1, hardMode: match.hardMode },
-        { uid: opp, profile: match.profiles[opp] },
-        history,
-      )
-      go(`/m/${id}`)
+      go(`/m/${await startRematch(user, myProfile, match, { uid: opp, profile: match.profiles[opp] }, history)}`)
     } catch (e) {
       showToast((e as Error).message, 3000)
     } finally {
@@ -305,7 +305,7 @@ function Game({
 
   const shareLink = async () => {
     const url = location.href
-    const text = `Play Worduel with me (${match.mode}, ${match.length} letters)`
+    const text = `Play Worduel with me (${MODE_NAMES[match.mode]}, ${match.length} letters)`
     try {
       if (navigator.share) await navigator.share({ title: 'Worduel', text, url })
       else {
@@ -368,7 +368,7 @@ function Game({
   } else if (match.mode === 'duel') {
     const score = multi && opp ? `You ${solvedBy(me)} · ${nameOf(opp)} ${solvedBy(opp)}` : null
     const myBoards = typeable.filter(Boolean).length
-    if (!isPlayer) banner = 'Duel in progress'
+    if (!isPlayer) banner = 'Classic duel in progress'
     else if (myTurn) {
       bannerClass += ' your-turn'
       banner = (
@@ -415,7 +415,7 @@ function Game({
   } else {
     banner = (
       <>
-        Team play
+        Team
         <span className="sub">{multi ? `${solvedCount} of ${match.boardCount} solved · guess any time` : 'Either of you can guess any time'}</span>
       </>
     )
@@ -431,7 +431,7 @@ function Game({
       <Header
         left={
           <>
-            <BackButton />
+            <BackButton dot={elsewhere} />
             <HelpButton />
           </>
         }
@@ -544,6 +544,7 @@ function Game({
 
       {match.status === 'finished' && !revealing && (
         <div className="panel">
+          {match.rematch && match.rematch.by !== me && <div>{nameOf(opp)} started a rematch</div>}
           <div className="actions">
             {myPlayOn && (
               <button
@@ -556,7 +557,7 @@ function Game({
             )}
             {isPlayer && opp && (
               <button className="btn" disabled={busy} onClick={rematch}>
-                Rematch
+                {match.rematch ? 'Go to rematch' : 'Rematch'}
               </button>
             )}
             {!myPlayOn && (

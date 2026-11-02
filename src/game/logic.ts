@@ -119,6 +119,16 @@ export function needsMe(match: Match, uid: string) {
   return true
 }
 
+/**
+ * Should this match catch `uid`'s eye from elsewhere in the app: something for them to do, or in team play,
+ * a move by their teammate (or a match their teammate started) that they haven't followed up on.
+ */
+export function wantsAttention(match: Match, uid: string) {
+  if (match.mode !== 'team') return needsMe(match, uid)
+  if (match.status !== 'active' || !match.players.includes(uid)) return false
+  return match.lastMove ? match.lastMove.by !== uid : match.createdBy !== uid
+}
+
 /** Duel winner: most boards solved, then fewest rows used on the boards won, then whoever moved second on board 1. */
 export function duelWinner(match: Match): string | null {
   if (match.players.length < 2) return null

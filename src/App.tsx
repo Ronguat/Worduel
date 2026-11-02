@@ -1,7 +1,7 @@
 import type { User } from 'firebase/auth'
 import { useEffect, useState } from 'react'
 import { signIn } from './game/actions'
-import { needsMe } from './game/logic'
+import { wantsAttention } from './game/logic'
 import { useAuthUser, useMyMatches, useRoute } from './hooks'
 import { Header, ThemeButton, useTheme } from './components/Chrome'
 import { Lobby } from './components/Lobby'
@@ -55,7 +55,7 @@ function SignedIn({ user, theme }: { user: User; theme: ReturnType<typeof useThe
   const matches = useMyMatches(user.uid)
   const profiles = useProfiles((matches ?? []).flatMap((m) => m.players))
 
-  const myTurns = (matches ?? []).filter((m) => m.mode !== 'team' && needsMe(m, user.uid)).length
+  const myTurns = (matches ?? []).filter((m) => wantsAttention(m, user.uid)).length
   useEffect(() => {
     document.title = myTurns ? `(${myTurns}) Worduel` : 'Worduel'
   }, [myTurns])

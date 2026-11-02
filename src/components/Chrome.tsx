@@ -11,10 +11,15 @@ export function Header({ left, right }: { left?: ReactNode; right?: ReactNode })
   )
 }
 
-export function BackButton() {
+/** `dot` flags that another match is waiting on you. */
+export function BackButton({ dot = false }: { dot?: boolean }) {
   return (
-    <button className="icon-btn" onClick={() => go('/')} aria-label="Back to matches">
-      ‹
+    <button
+      className="icon-btn badge-wrap"
+      onClick={() => go('/')}
+      aria-label={dot ? 'Back to matches (another match needs you)' : 'Back to matches'}
+    >
+      ‹{dot && <span className="badge alert" />}
     </button>
   )
 }
@@ -94,11 +99,6 @@ function Help({ onClose }: { onClose: () => void }) {
         your opponent or teammate. Matches save as you go, so close the app whenever and pick it back up later.
       </p>
       <h3>Duel</h3>
-      <ul>
-        <li>You take turns guessing on a shared board. There's no guess limit; whoever lands the word wins it.</li>
-        <li>Who goes first alternates from match to match.</li>
-      </ul>
-      <h3>Face-off</h3>
       <ul>
         <li>Each of you picks a word for the other to guess. Any real word counts.</li>
         <li>Guess at your own pace on your own board. You can watch your opponent's progress on your word.</li>

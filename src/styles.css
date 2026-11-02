@@ -931,6 +931,9 @@ button {
   background: var(--them);
   border: 2px solid var(--bg);
 }
+.badge.alert {
+  background: var(--danger);
+}
 .unread-dot {
   display: inline-block;
   margin-left: 6px;

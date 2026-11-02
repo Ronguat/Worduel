@@ -18,7 +18,8 @@ function ago(t: number) {
   return new Date(t).toLocaleDateString()
 }
 
-export const MODE_NAMES = { duel: 'Duel', team: 'Team', faceoff: 'Face-off' } as const
+// Face-off took over the Duel name; the original turn-taking duels are retired but can still be finished.
+export const MODE_NAMES = { duel: 'Classic duel', team: 'Team', faceoff: 'Duel' } as const
 
 export function describe(m: Match) {
   const mode = MODE_NAMES[m.mode]
@@ -79,14 +80,14 @@ function MatchCard({ m, me }: { m: Match; me: string }) {
 }
 
 function records(matches: Match[], me: string, nameOf: (uid: string) => string) {
-  const by: Record<string, { name: string; dw: number; dl: number; tw: number; tl: number; fw: number; fl: number; fd: number }> = {}
+  const by: Record<string, { name: string; tw: number; tl: number; fw: number; fl: number; fd: number }> = {}
   for (const m of matches) {
     if (m.status !== 'finished') continue
     const opp = otherPlayer(m, me)
     if (!opp) continue
-    const r = (by[opp] ??= { name: nameOf(opp), dw: 0, dl: 0, tw: 0, tl: 0, fw: 0, fl: 0, fd: 0 })
-    if (m.mode === 'duel') m.winner === me ? r.dw++ : r.dl++
-    else if (m.mode === 'faceoff') m.result === 'draw' ? r.fd++ : m.winner === me ? r.fw++ : r.fl++
+    if (m.mode === 'duel') continue // classic duels are retired and no longer counted
+    const r = (by[opp] ??= { name: nameOf(opp), tw: 0, tl: 0, fw: 0, fl: 0, fd: 0 })
+    if (m.mode === 'faceoff') m.result === 'draw' ? r.fd++ : m.winner === me ? r.fw++ : r.fl++
     else m.result === 'won' ? r.tw++ : r.tl++
   }
   return Object.entries(by)
@@ -199,10 +200,7 @@ export function Lobby({
                   <div className="record" key={uid}>
                     <div className="who">vs {r.name}</div>
                     <div className="stat">
-                      Duels <b>{r.dw}–{r.dl}</b>
-                    </div>
-                    <div className="stat">
-                      Face-offs <b>{r.fw}–{r.fl}</b>
+                      Duels <b>{r.fw}–{r.fl}</b>
                       {r.fd > 0 && ` (${r.fd} drawn)`}
                     </div>
                     <div className="stat">

@@ -16,7 +16,9 @@ interface Settings {
 export function NewMatch({ user, me, history }: { user: User; me: Profile; history: Match[] }) {
   const stored = useMemo(() => Object.assign({}, ...history.map((m) => m.profiles)), [history])
   const nameOf = useNameOf(stored)
-  const [settings, setSettings] = useStoredState<Settings>('newMatchSettings', { mode: 'duel', length: 5, hardMode: true })
+  const [saved, setSettings] = useStoredState<Settings>('newMatchSettings', { mode: 'faceoff', length: 5, hardMode: true })
+  // classic duels are retired; an old saved choice of them becomes a (face-off) duel
+  const settings = saved.mode === 'duel' ? { ...saved, mode: 'faceoff' as const } : saved
   const set = (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch }))
 
   // People you've already played with, most recent first.
@@ -70,22 +72,17 @@ export function NewMatch({ user, me, history }: { user: User; me: Profile; histo
           <div className="field">
             <label>Mode</label>
             <div className="segmented">
-              <button aria-pressed={mode === 'duel'} onClick={() => set({ mode: 'duel' })}>
+              <button aria-pressed={mode === 'faceoff'} onClick={() => set({ mode: 'faceoff' })}>
                 Duel
               </button>
               <button aria-pressed={mode === 'team'} onClick={() => set({ mode: 'team' })}>
                 Team
               </button>
-              <button aria-pressed={mode === 'faceoff'} onClick={() => set({ mode: 'faceoff' })}>
-                Face-off
-              </button>
             </div>
             <div className="hint">
-              {mode === 'duel'
-                ? 'Take turns guessing on a shared board. No guess limit; whoever gets the word wins it.'
-                : mode === 'team'
-                  ? `Work together; either of you can guess any time. ${teamMaxGuesses(length)} guesses per board.`
-                  : "Each of you picks a word for the other, then guess at your own pace. Fewer guesses wins; a tie is a draw."}
+              {mode === 'team'
+                ? `Work together; either of you can guess any time. ${teamMaxGuesses(length)} guesses.`
+                : 'Each of you picks a word for the other, then guess at your own pace. Fewer guesses wins; a tie is a draw.'}
             </div>
           </div>
 

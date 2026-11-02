@@ -1,14 +1,15 @@
 # Worduel
 
-Wordle for two, played asynchronously. Take turns chipping away at a puzzle (duel) or work on it together (team), close the app, and pick it back up later.
+Wordle for two, played asynchronously. Pick a word for each other and race to solve it in fewer guesses (duel), or work on one together (team), chipping away whenever: close the app and pick it back up later.
 
 Live at **https://ronguat.github.io/Worduel/**. On a phone, use "Add to Home Screen" to get an app icon.
 
 ## Rules
 
-- **Duel**: players alternate turns on a shared board with no guess limit; whoever lands the word wins it. With several boards, each turn you can queue one guess on any subset of the unsolved boards. Most boards won takes the match; ties go to fewer rows used on the boards won, then to whoever went second. Who goes first alternates between matches.
-- **Team**: either player guesses any time. Each board allows 6 guesses (7 for six-letter words); solve every board to win.
+- **Duel**: each player picks a word for the other, then guesses at their own pace. Fewer guesses wins; the same number is a draw. Once the result is settled, the loser can keep guessing or reveal the word. (Duel mode is stored as `faceoff` in the data; matches stored as `duel` are the retired turn-taking "classic duels", which can still be finished and rematch as duels.)
+- **Team**: either player guesses any time, with 6 guesses (7 for six-letter words).
 - **Hard mode** (on by default): every revealed hint must be reused, whoever revealed it.
+- **Rematch** links the new match from the finished one, so if both players press it they land in the same match.
 
 ## Stack
 
