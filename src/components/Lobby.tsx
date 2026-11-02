@@ -1,5 +1,5 @@
 import type { User } from 'firebase/auth'
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { logOut } from '../game/actions'
 import { hasUnreadChat } from '../game/chat'
 import { faceoffBoards, needsMe, otherPlayer } from '../game/logic'
@@ -90,7 +90,9 @@ function records(matches: Match[], me: string, nameOf: (uid: string) => string) 
     if (m.mode === 'faceoff') m.result === 'draw' ? r.fd++ : m.winner === me ? r.fw++ : r.fl++
     else m.result === 'won' ? r.tw++ : r.tl++
   }
-  return Object.entries(by)
+  // most-played opponents first
+  const games = (r: (typeof by)[string]) => r.tw + r.tl + r.fw + r.fl + r.fd
+  return Object.entries(by).sort(([, a], [, b]) => games(b) - games(a))
 }
 
 export function Lobby({
@@ -196,17 +198,34 @@ export function Lobby({
             <div className="section">
               <h2>Record</h2>
               <div className="records">
+                <span className="rh" />
+                <span className="rh">Duel</span>
+                <span className="rh">Team</span>
                 {recs.map(([uid, r]) => (
-                  <div className="record" key={uid}>
-                    <div className="who">vs {r.name}</div>
-                    <div className="stat">
-                      Duels <b>{r.fw}–{r.fl}</b>
-                      {r.fd > 0 && ` (${r.fd} drawn)`}
-                    </div>
-                    <div className="stat">
-                      Team <b>{r.tw}–{r.tl}</b>
-                    </div>
-                  </div>
+                  <Fragment key={uid}>
+                    <span className="who">{r.name}</span>
+                    <span className="stat">
+                      {r.fw + r.fl + r.fd ? (
+                        <>
+                          <b>
+                            {r.fw}–{r.fl}
+                          </b>
+                          {r.fd > 0 && <span className="drawn"> · {r.fd} drawn</span>}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </span>
+                    <span className="stat">
+                      {r.tw + r.tl ? (
+                        <b>
+                          {r.tw}–{r.tl}
+                        </b>
+                      ) : (
+                        '—'
+                      )}
+                    </span>
+                  </Fragment>
                 ))}
               </div>
             </div>

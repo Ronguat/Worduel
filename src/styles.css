@@ -566,27 +566,49 @@ button {
   background: var(--absent);
   color: #fff;
 }
+/* one row per opponent: name, duel W–L, team W–L */
 .records {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 8px;
-}
-.record {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 24px;
+  align-items: baseline;
   background: var(--bg-raised);
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 8px 14px;
 }
-.record .who {
+.records > * {
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.records > :nth-child(-n + 3) {
+  border-top: none;
+}
+.records .rh {
+  font-size: 11px;
   font-weight: 700;
-  margin-bottom: 4px;
-}
-.record .stat {
-  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--text-dim);
+  padding: 0;
 }
-.record .stat b {
+.records .who {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.records .stat {
+  font-size: 14px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.records .stat b {
   color: var(--text);
+}
+.records .drawn {
+  font-size: 12px;
 }
 .empty {
   color: var(--text-dim);
