@@ -572,13 +572,14 @@ button {
 .records {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: baseline;
   background: var(--bg-raised);
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 8px 14px;
 }
 .records > * {
+  /* cells fill their row (so dividers line up) and share a line height (so text lines up) */
+  line-height: 22px;
   padding: 6px 0;
   border-top: 1px solid var(--line);
 }
