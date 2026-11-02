@@ -64,6 +64,8 @@ button {
 }
 
 .screen {
+  /* anchors the ⋯ menu to this screen rather than the window, so it opens by its button even with the chat beside it */
+  position: relative;
   height: 100dvh;
   display: flex;
   flex-direction: column;

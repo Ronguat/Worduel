@@ -80,6 +80,23 @@ export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
     el.style.height = `${el.scrollHeight + 2}px`
   }, [text])
 
+  // Stay on the newest message when the list gets shorter (the message box growing, a reply or preview
+  // appearing, a phone keyboard opening), unless you've scrolled up to read.
+  const pinned = useRef(true)
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    const ro = new ResizeObserver(() => {
+      if (pinned.current) el.scrollTop = el.scrollHeight
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const onListScroll = () => {
+    const el = listRef.current
+    if (el) pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24
+  }
+
   const last = messages[messages.length - 1]
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
@@ -126,7 +143,7 @@ export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
           </button>
         )}
       </div>
-      <div className="chat-list" ref={listRef}>
+      <div className="chat-list" ref={listRef} onScroll={onListScroll}>
         {messages.length === 0 && (
           <div className="chat-empty">
             No messages yet. Talk some trash. 🗑️
