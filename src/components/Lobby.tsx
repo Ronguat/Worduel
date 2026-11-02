@@ -202,7 +202,7 @@ export function Lobby({
             <div className="section">
               <h2>Record</h2>
               <div className="records">
-                <span className="rh" />
+                <span className="rh">Opponent</span>
                 <span className="rh">Duel</span>
                 <span className="rh">Team</span>
                 {recs.map(([uid, r]) => (

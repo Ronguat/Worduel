@@ -572,7 +572,6 @@ button {
 .records {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
-  column-gap: 24px;
   align-items: baseline;
   background: var(--bg-raised);
   border: 1px solid var(--line);
@@ -586,13 +585,18 @@ button {
 .records > :nth-child(-n + 3) {
   border-top: none;
 }
+/* spacing between columns lives on the cells, so the row dividers run unbroken */
+.records > :not(:nth-child(3n + 1)) {
+  padding-left: 24px;
+}
 .records .rh {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-dim);
-  padding: 0;
+  padding-top: 0;
+  padding-bottom: 6px;
 }
 .records .who {
   font-weight: 700;
