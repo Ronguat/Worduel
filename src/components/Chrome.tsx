@@ -98,6 +98,10 @@ function Help({ onClose }: { onClose: () => void }) {
         you and <span className="dot them" />
         your opponent or teammate. Matches save as you go, so close the app whenever and pick it back up later.
       </p>
+      <p>
+        Until someone makes a guess, either of you can call a match off from the ⋯ menu (Cancel if you started it,
+        Decline if you didn't). It doesn't count for anyone.
+      </p>
       <h3>Duel</h3>
       <ul>
         <li>Each of you picks a word for the other to guess. Any real word counts.</li>

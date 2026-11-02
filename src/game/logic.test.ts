@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyGuesses, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, isPlayingOn, needsMe, revealFaceoffWord, teamMaxGuesses, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith, wantsAttention } from './logic'
+import { applyGuesses, callOff, canCallOff, boardTurn, decodeAnswer, duelWinner, encodeAnswer, hardModeViolation, isPlayingOn, needsMe, revealFaceoffWord, teamMaxGuesses, newMatchData, nextFirstPlayer, score, setFaceoffWord, startWith, wantsAttention } from './logic'
 import type { Match } from '../types'
 
 const valid = () => true
@@ -155,6 +155,31 @@ describe('team', () => {
     const r2 = applyGuesses(r1.match, 'a', [{ board: 1, word: 'slate' }], valid, 2)
     if (!r2.ok) throw new Error(r2.error)
     expect(r2.match.result).toBe('won')
+  })
+})
+
+describe('calling a match off', () => {
+  it('is allowed until someone guesses, then never', () => {
+    let m = makeMatch('faceoff', [])
+    expect(canCallOff(m, 'b')).toBe(true)
+    const p = setFaceoffWord(m, 'a', 'ghost', valid, 1)
+    if (!p.ok) throw new Error(p.error)
+    m = p.match // picking a word doesn't start the match
+    expect(canCallOff(m, 'b')).toBe(true)
+    const r = callOff(m, 'b', 5)
+    if (!r.ok) throw new Error(r.error)
+    expect(r.match.status).toBe('cancelled')
+    expect(r.match.cancelledBy).toBe('b')
+    expect(r.match.winner).toBeNull()
+    expect(canCallOff(r.match, 'a')).toBe(false)
+  })
+
+  it('is refused once a guess is made', () => {
+    const m = makeMatch('team', ['crane'])
+    const g = applyGuesses(m, 'a', [{ board: 0, word: 'slate' }], valid, 1)
+    if (!g.ok) throw new Error(g.error)
+    expect(canCallOff(g.match, 'b')).toBe(false)
+    expect(callOff(g.match, 'b', 2).ok).toBe(false)
   })
 })
 

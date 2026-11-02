@@ -39,13 +39,16 @@ function MatchCard({ m, me }: { m: Match; me: string }) {
   const fo = m.mode === 'faceoff' ? faceoffBoards(m, me) : null
   // a finished face-off shows each player's solve count ('—' if unsolved), like the match screen
   const foCount = (b: BoardState | null) => (m.status === 'finished' && !b?.solvedBy ? '—' : String(b?.guesses.length ?? 0))
-  const progress = fo
-    ? `${foCount(fo.mine)} vs ${foCount(fo.theirs)} guesses`
-    : m.boardCount > 1
-      ? `${solved}/${m.boardCount} solved`
-      : guesses
-        ? `${guesses} guess${guesses === 1 ? '' : 'es'}`
-        : 'No guesses yet'
+  const progress =
+    m.status === 'cancelled'
+      ? 'Never started'
+      : fo
+        ? `${foCount(fo.mine)} vs ${foCount(fo.theirs)} guesses`
+        : m.boardCount > 1
+          ? `${solved}/${m.boardCount} solved`
+          : guesses
+            ? `${guesses} guess${guesses === 1 ? '' : 'es'}`
+            : 'No guesses yet'
 
   let pill = { text: '', cls: '' }
   if (m.status === 'waiting') pill = { text: 'Waiting', cls: '' }
@@ -53,7 +56,8 @@ function MatchCard({ m, me }: { m: Match; me: string }) {
     if (m.mode === 'team') pill = { text: 'Play', cls: 'go' }
     else if (fo?.theirs && !fo.theirs.a) pill = { text: 'Pick a word', cls: 'go' }
     else pill = needsMe(m, me) ? { text: 'Your turn', cls: 'go' } : { text: 'Waiting', cls: '' }
-  } else if (m.result === 'draw') pill = { text: 'Draw', cls: '' }
+  } else if (m.status === 'cancelled') pill = { text: m.cancelledBy === m.createdBy ? 'Cancelled' : 'Declined', cls: '' }
+  else if (m.result === 'draw') pill = { text: 'Draw', cls: '' }
   else {
     const won = m.mode === 'team' ? m.result === 'won' : m.winner === me
     pill = { text: won ? 'Won' : 'Lost', cls: won ? 'win' : 'loss' }
@@ -114,7 +118,7 @@ export function Lobby({
   const yourTurn = list.filter((m) => needsMe(m, me))
   const theirTurn = list.filter((m) => m.status === 'active' && !needsMe(m, me))
   const waiting = list.filter((m) => m.status === 'waiting')
-  const finished = list.filter((m) => m.status === 'finished')
+  const finished = list.filter((m) => m.status === 'finished' || m.status === 'cancelled')
   // names stored with matches cover the moment before live profiles load
   const stored = useMemo(() => Object.assign({}, ...list.map((m) => m.profiles)), [list])
   const nameOf = useNameOf(stored)

@@ -85,6 +85,8 @@ export function Board({ match, index, me, draft, seen, selected, canType, expand
     status = guessCount
   }
 
+  if (match.status === 'cancelled') status = '' // called off before anyone guessed; nothing to report
+
   const spent = !isOpen(board) || (match.mode === 'duel' && boardTurn(match, index) !== me)
   const classes = ['board', selected && multi && canType ? 'selected' : '', active && spent ? 'done' : ''].join(' ')
   return (

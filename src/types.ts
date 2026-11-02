@@ -40,7 +40,8 @@ export interface Match {
   createdBy: string
   createdAt: number
   updatedAt: number
-  status: 'waiting' | 'active' | 'finished'
+  /** cancelled: called off before anyone guessed (declined or cancelled); counts for no one */
+  status: 'waiting' | 'active' | 'finished' | 'cancelled'
   /** duel only */
   firstPlayer: string | null
   /** unused since duels moved to per-board turns (see boardTurn); kept for older matches */
@@ -57,6 +58,10 @@ export interface Match {
   lastChat?: { by: string; at: number }
   /** the match started from this one with Rematch, and who started it */
   rematch?: { id: string; by: string }
+  /** the finished match this one is a rematch of */
+  rematchOf?: string
+  /** who called the match off, when status is 'cancelled' */
+  cancelledBy?: string
 }
 
 export interface ChatMessage {

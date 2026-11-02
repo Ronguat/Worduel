@@ -161,7 +161,7 @@ export function faceoffOutcome(match: Match): { winner: string | null; draw: boo
  * so a newer copy of a match can be told apart from an older one without trusting clocks.
  */
 export function progress(m: Match) {
-  let n = m.players.length + (m.status === 'finished' ? 1 : 0)
+  let n = m.players.length + (m.status === 'finished' || m.status === 'cancelled' ? 1 : 0)
   for (const b of m.boards) n += b.guesses.length * 4 + (b.a ? 1 : 0) + (b.failed ? 1 : 0) + (b.solvedBy ? 1 : 0)
   return n
 }
@@ -248,6 +248,16 @@ export function revealFaceoffWord(match: Match, uid: string, now: number): Apply
   if (i < 0 || !isPlayingOn(match, match.boards[i])) return { ok: false, error: 'Nothing to reveal' }
   const boards = match.boards.map((b, j) => (j === i ? { ...b, failed: true } : b))
   return { ok: true, match: { ...match, boards, updatedAt: now, lastMove: { by: uid, at: now } } }
+}
+
+/** A match can be called off (cancelled by its creator, declined by the other player) until someone guesses. */
+export function canCallOff(match: Match, uid: string) {
+  return match.status === 'active' && match.players.includes(uid) && match.boards.every((b) => b.guesses.length === 0)
+}
+
+export function callOff(match: Match, uid: string, now: number): ApplyResult {
+  if (!canCallOff(match, uid)) return { ok: false, error: 'Too late to call this match off: a guess has been made' }
+  return { ok: true, match: { ...match, status: 'cancelled', cancelledBy: uid, turn: null, updatedAt: now, lastMove: { by: uid, at: now } } }
 }
 
 export function resign(match: Match, uid: string, now: number): Match {

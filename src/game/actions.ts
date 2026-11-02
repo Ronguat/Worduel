@@ -1,9 +1,10 @@
 import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, type User } from 'firebase/auth'
-import { collection, deleteDoc, doc, runTransaction, setDoc } from 'firebase/firestore'
+import { collection, deleteDoc, deleteField, doc, runTransaction, setDoc } from 'firebase/firestore'
 import { auth, db } from '../firebase'
 import type { GuessEntry, Match, Mode, Profile, WordLength } from '../types'
 import {
   applyGuesses,
+  callOff,
   newMatchData,
   nextFirstPlayer,
   resign,
@@ -65,7 +66,7 @@ export async function createMatch(user: User, me: Profile, opts: MatchOptions, o
  */
 export async function startRematch(user: User, me: Profile, old: Match, opponent: Opponent, history: Match[]) {
   const mode = old.mode === 'duel' ? 'faceoff' : old.mode
-  const data = await buildMatch(user, me, { mode, length: old.length, hardMode: old.hardMode, boardCount: 1 }, opponent, history)
+  const data = { ...(await buildMatch(user, me, { mode, length: old.length, hardMode: old.hardMode, boardCount: 1 }, opponent, history)), rematchOf: old.id }
   const ref = doc(collection(db, 'matches'))
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(matchRef(old.id))
@@ -121,5 +122,26 @@ export const revealWord = (uid: string, matchId: string) => transact(matchId, (m
 
 export const resignMatch = (uid: string, matchId: string) =>
   transact(matchId, (m) => (m.status === 'active' ? { ok: true, match: resign(m, uid, Date.now()) } : { ok: true, match: m }))
+
+/**
+ * Cancels (creator) or declines (other player) a match nobody has guessed in yet. If it was a rematch, the
+ * finished match it came from is unlinked so Rematch starts a fresh one.
+ */
+export function callOffMatch(uid: string, matchId: string) {
+  return runTransaction(db, async (tx) => {
+    const snap = await tx.get(matchRef(matchId))
+    if (!snap.exists()) throw new Error('Match not found')
+    const result = callOff({ id: matchId, ...(snap.data() as Omit<Match, 'id'>) }, uid, Date.now())
+    if (!result.ok) throw new Error(result.error)
+    const parentId = result.match.rematchOf
+    const parent = parentId ? await tx.get(matchRef(parentId)) : null
+    const { id: _id, ...data } = result.match
+    tx.set(matchRef(matchId), data)
+    if (parentId && (parent?.data() as Match | undefined)?.rematch?.id === matchId) {
+      tx.update(matchRef(parentId), { rematch: deleteField() })
+    }
+    return result.match
+  })
+}
 
 export const deleteMatch = (id: string) => deleteDoc(matchRef(id))

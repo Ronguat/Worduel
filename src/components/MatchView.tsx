@@ -1,7 +1,8 @@
 import type { User } from 'firebase/auth'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { deleteMatch, joinMatch, pickFaceoffWord, resignMatch, revealWord, startRematch, submitGuesses } from '../game/actions'
+import { callOffMatch, deleteMatch, joinMatch, pickFaceoffWord, resignMatch, revealWord, startRematch, submitGuesses } from '../game/actions'
 import {
+  canCallOff,
   canGuessOn,
   decodeAnswer,
   faceoffBoards,
@@ -340,9 +341,21 @@ function Game({
     }
   }
 
+  // before anyone guesses, the creator can cancel and the other player can decline, without a loss
+  const calledOffWord = match.createdBy === me ? 'Cancel' : 'Decline'
+  const doCallOff = async () => {
+    setMenuOpen(false)
+    if (!confirm(`${calledOffWord} this match? It won't count for either of you.`)) return
+    try {
+      onSaved(await callOffMatch(me, match.id))
+    } catch (e) {
+      showToast((e as Error).message, 3000)
+    }
+  }
+
   const doDelete = async () => {
     setMenuOpen(false)
-    if (!confirm('Delete this invite?')) return
+    if (!confirm('Cancel this invite?')) return
     await deleteMatch(match.id)
     go('/')
   }
@@ -354,6 +367,13 @@ function Game({
   let bannerClass = 'banner'
   if (match.status === 'waiting') {
     banner = isPlayer ? 'Waiting for your friend to join' : `${nameOf(match.createdBy)} invited you`
+  } else if (match.status === 'cancelled') {
+    banner = (
+      <>
+        {calledOffText(match, me, nameOf)}
+        <span className="sub">It doesn't count for either of you.</span>
+      </>
+    )
   } else if (match.status === 'finished' && !revealing) {
     let sub = ''
     if (myPlayOn) sub = "You can keep guessing to finish the word, or reveal it."
@@ -422,8 +442,11 @@ function Game({
   }
 
   const menuItems: [string, () => void][] = []
-  if (isPlayer && active) menuItems.push([match.mode === 'duel' ? 'Resign' : 'Give up', doResign])
-  if (match.status === 'waiting' && match.createdBy === me) menuItems.push(['Delete invite', doDelete])
+  if (isPlayer && active) {
+    if (canCallOff(match, me)) menuItems.push([`${calledOffWord} match`, doCallOff])
+    else menuItems.push([match.mode === 'duel' ? 'Resign' : 'Give up', doResign])
+  }
+  if (match.status === 'waiting' && match.createdBy === me) menuItems.push(['Cancel invite', doDelete])
 
   return (
     <div className="match-layout">
@@ -459,7 +482,7 @@ function Game({
           </>
         }
       />
-      {menuOpen && (
+      {menuOpen && menuItems.length > 0 && (
         <div className="menu" onClick={(e) => e.stopPropagation()}>
           {menuItems.map(([label, fn]) => (
             <button key={label} onClick={fn}>
@@ -569,6 +592,16 @@ function Game({
         </div>
       )}
 
+      {match.status === 'cancelled' && (
+        <div className="panel">
+          <div className="actions">
+            <button className="btn secondary" onClick={() => go('/')}>
+              All matches
+            </button>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div className="toast" key={toast.key}>
           {toast.text}
@@ -593,6 +626,13 @@ export function faceoffScore(match: Match, me: string, nameOf: (uid: string | nu
   const { mine, theirs } = faceoffBoards(match, me)
   const tally = (b: typeof mine) => (b?.solvedBy ? String(b.guesses.length) : '—')
   return `You ${tally(mine)} · ${nameOf(otherPlayer(match, me))} ${tally(theirs)}`
+}
+
+/** "You declined this match", "Bob cancelled this match", … */
+export function calledOffText(match: Match, me: string, nameOf: (uid: string | null) => string) {
+  const by = match.cancelledBy ?? null
+  const verb = by === match.createdBy ? 'cancelled' : 'declined'
+  return `${by === me ? 'You' : nameOf(by)} ${verb} this match`
 }
 
 export function resultText(match: Match, me: string, nameOf: (uid: string | null) => string) {
