@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MAX_CHAT_LENGTH, markChatRead, replyRef, sendMessage } from '../game/chat'
 import { hasFormatting } from '../game/markdown'
 import { useStoredState } from '../hooks'
-import type { ChatMessage } from '../types'
+import type { ChatMessage, Match } from '../types'
 import { Markdown } from './Markdown'
 
 const EMOJI = [
@@ -21,7 +21,7 @@ function timeLabel(t: number) {
 }
 
 interface Props {
-  matchId: string
+  match: Match
   me: string
   opponentName: string
   messages: ChatMessage[]
@@ -29,7 +29,8 @@ interface Props {
   onClose?: () => void
 }
 
-export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
+export function Chat({ match, me, opponentName, messages, onClose }: Props) {
+  const matchId = match.id
   const [text, setText] = useStoredState(`chatDraft:${matchId}`, '')
   const [picker, setPicker] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -98,10 +99,12 @@ export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
   }
 
   const last = messages[messages.length - 1]
+  const matchRef = useRef(match)
+  matchRef.current = match
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
-    if (last) markChatRead(matchId, last.at)
-  }, [matchId, last])
+    if (last) markChatRead(matchRef.current, me, last)
+  }, [matchId, me, last])
 
   const send = async () => {
     const t = text.trim()
@@ -146,12 +149,8 @@ export function Chat({ matchId, me, opponentName, messages, onClose }: Props) {
       <div className="chat-list" ref={listRef} onScroll={onListScroll}>
         {messages.length === 0 && (
           <div className="chat-empty">
-            No messages yet. Talk some trash. 🗑️
-            <div className="chat-tips">
-              Right-click a message to reply (long-press on a phone).
-              <br />
-              <b>**bold**</b> · <i>*italic*</i> · <s>~~strike~~</s> · <code>`code`</code> · ||spoiler||
-            </div>
+            {match.mode === 'team' ? 'No messages yet. Talk strategy. 🧠' : 'No messages yet. Talk some trash. 🗑️'}
+            <div className="chat-tips">Right-click a message to reply (long-press on a phone).</div>
           </div>
         )}
         {messages.map((m, i) => {

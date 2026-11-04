@@ -56,6 +56,8 @@ export interface Match {
   lastMove: { by: string; at: number } | null
   /** most recent chat message, so the lobby can flag unread chat */
   lastChat?: { by: string; at: number }
+  /** when each player last read the chat, so every device agrees on what's unread */
+  chatRead?: Record<string, number>
   /** the match started from this one with Rematch, and who started it */
   rematch?: { id: string; by: string }
   /** the finished match this one is a rematch of */

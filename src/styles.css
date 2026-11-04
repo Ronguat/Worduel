@@ -1147,9 +1147,6 @@ button {
   font-size: 12px;
   line-height: 1.6;
 }
-.chat-tips code {
-  font-size: 0.95em;
-}
 @media (hover: none) {
   /* long-press replies instead of opening the text-selection menu */
   .bubble {

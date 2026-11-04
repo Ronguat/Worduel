@@ -134,7 +134,7 @@ function Game({
   const [chatOpen, setChatOpen] = useState(false)
   const messages = useMessages(match.id, chatEnabled)
   const lastMsg = messages[messages.length - 1]
-  const unread = !wide && !chatOpen && !!lastMsg && lastMsg.by !== me && lastMsg.at > chatReadAt(match.id)
+  const unread = !wide && !chatOpen && !!lastMsg && lastMsg.by !== me && lastMsg.at > chatReadAt(match, me)
 
   // Remember what has been revealed so new guesses (including ones made while you were away) flip in.
   const countsKey = counts.join(',')
@@ -610,7 +610,7 @@ function Game({
     </div>
     {chatEnabled && (wide || chatOpen) && (
       <Chat
-        matchId={match.id}
+        match={match}
         me={me}
         opponentName={nameOf(opp)}
         messages={messages}

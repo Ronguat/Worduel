@@ -1,7 +1,7 @@
 import { addDoc, collection, doc, limitToLast, onSnapshot, orderBy, query, updateDoc } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { db } from '../firebase'
-import type { ChatMessage, ReplyRef } from '../types'
+import type { ChatMessage, Match, ReplyRef } from '../types'
 import { parseMd, toPlain } from './markdown'
 
 export const MAX_CHAT_LENGTH = 500
@@ -36,10 +36,13 @@ export function useMessages(matchId: string, enabled: boolean) {
   return messages
 }
 
-// When you last read each match's chat lives in this device's storage.
+// When you last read a match's chat is saved on the match (per player), so it carries across devices, and in
+// this device's storage, so it updates instantly and works offline. Whichever is later wins.
 const readKey = (matchId: string) => `chatRead:${matchId}`
 
-export function chatReadAt(matchId: string) {
+type ChatState = Pick<Match, 'id' | 'lastChat' | 'chatRead'>
+
+function localReadAt(matchId: string) {
   try {
     return Number(localStorage.getItem(readKey(matchId))) || 0
   } catch {
@@ -47,14 +50,22 @@ export function chatReadAt(matchId: string) {
   }
 }
 
-export function markChatRead(matchId: string, at: number) {
+export function chatReadAt(match: ChatState, me: string) {
+  return Math.max(localReadAt(match.id), match.chatRead?.[me] ?? 0)
+}
+
+/** Records that `me` has read up to `last`. Saved to the match only when it's news: an unread message from the other player. */
+export function markChatRead(match: ChatState, me: string, last: Pick<ChatMessage, 'by' | 'at'>) {
   try {
-    if (at > chatReadAt(matchId)) localStorage.setItem(readKey(matchId), String(at))
+    if (last.at > localReadAt(match.id)) localStorage.setItem(readKey(match.id), String(last.at))
   } catch {
     /* storage unavailable */
   }
+  if (last.by !== me && last.at > (match.chatRead?.[me] ?? 0)) {
+    updateDoc(doc(db, 'matches', match.id), { [`chatRead.${me}`]: last.at }).catch((e) => console.warn('Saving chat read failed', e))
+  }
 }
 
-export function hasUnreadChat(match: { id: string; lastChat?: { by: string; at: number } }, me: string) {
-  return !!match.lastChat && match.lastChat.by !== me && match.lastChat.at > chatReadAt(match.id)
+export function hasUnreadChat(match: ChatState, me: string) {
+  return !!match.lastChat && match.lastChat.by !== me && match.lastChat.at > chatReadAt(match, me)
 }
