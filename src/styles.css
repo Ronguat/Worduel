@@ -882,6 +882,44 @@ button {
   background: color-mix(in srgb, var(--them) 26%, var(--bg));
   border-bottom-left-radius: 4px;
 }
+.bubble.typing {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  height: 35px;
+  padding: 0 14px;
+}
+.bubble.typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  animation: typing-dot 1.2s ease-in-out infinite;
+}
+.bubble.typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.bubble.typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes typing-dot {
+  0%,
+  60%,
+  100% {
+    transform: none;
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bubble.typing span,
+  .badge.typing {
+    animation: none;
+  }
+}
 .bubble.big {
   background: none;
   font-size: 36px;
@@ -962,6 +1000,15 @@ button {
 }
 .badge.alert {
   background: var(--danger);
+}
+.badge.typing {
+  animation: typing-pulse 1.2s ease-in-out infinite;
+}
+@keyframes typing-pulse {
+  50% {
+    transform: scale(0.6);
+    opacity: 0.6;
+  }
 }
 .unread-dot {
   display: inline-block;

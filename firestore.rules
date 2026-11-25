@@ -36,12 +36,13 @@ service cloud.firestore {
         && request.auth.uid == resource.data.createdBy
         && resource.data.status == 'waiting';
 
+      function isPlayer() {
+        return signedIn()
+          && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.players;
+      }
+
       // chat: only the match's players can read or post, as themselves
       match /messages/{messageId} {
-        function isPlayer() {
-          return signedIn()
-            && request.auth.uid in get(/databases/$(database)/documents/matches/$(matchId)).data.players;
-        }
         allow read: if isPlayer();
         allow create: if isPlayer()
           && request.resource.data.keys().hasOnly(['by', 'text', 'at', 'replyTo'])
@@ -54,6 +55,15 @@ service cloud.firestore {
               && request.resource.data.replyTo.keys().hasOnly(['id', 'by', 'text'])
               && request.resource.data.replyTo.text is string
               && request.resource.data.replyTo.text.size() <= 200));
+      }
+
+      // typing indicator: one doc per player holding when they last typed (0 once they stop)
+      match /typing/{uid} {
+        allow read: if isPlayer();
+        allow create, update: if isPlayer()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['at'])
+          && request.resource.data.at is number;
       }
     }
   }

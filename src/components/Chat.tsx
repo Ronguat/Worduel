@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { MAX_CHAT_LENGTH, markChatRead, replyRef, sendMessage } from '../game/chat'
+import { MAX_CHAT_LENGTH, markChatRead, replyRef, sendMessage, useTypingSender } from '../game/chat'
 import { hasFormatting } from '../game/markdown'
 import { useStoredState } from '../hooks'
 import type { ChatMessage, Match } from '../types'
@@ -25,11 +25,13 @@ interface Props {
   me: string
   opponentName: string
   messages: ChatMessage[]
+  /** the other player is typing a message */
+  opponentTyping: boolean
   /** set when the chat is a drawer that can be closed */
   onClose?: () => void
 }
 
-export function Chat({ match, me, opponentName, messages, onClose }: Props) {
+export function Chat({ match, me, opponentName, messages, opponentTyping, onClose }: Props) {
   const matchId = match.id
   const [text, setText] = useStoredState(`chatDraft:${matchId}`, '')
   const [picker, setPicker] = useState(false)
@@ -40,6 +42,11 @@ export function Chat({ match, me, opponentName, messages, onClose }: Props) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const pressTimer = useRef<number>()
   const nameOf = (uid: string) => (uid === me ? 'You' : opponentName)
+  const typing = useTypingSender(matchId, me)
+  const edit = (next: string) => {
+    setText(next)
+    typing.typed(next)
+  }
 
   const startReply = (m: ChatMessage) => {
     setReplyTo(m)
@@ -106,11 +113,18 @@ export function Chat({ match, me, opponentName, messages, onClose }: Props) {
     if (last) markChatRead(matchRef.current, me, last)
   }, [matchId, me, last])
 
+  // Show their typing bubble if you're at the bottom anyway.
+  useEffect(() => {
+    const el = listRef.current
+    if (el && opponentTyping && pinned.current) el.scrollTop = el.scrollHeight
+  }, [opponentTyping])
+
   const send = async () => {
     const t = text.trim()
     if (!t) return
     const reply = replyTo
     setText('')
+    typing.stopped()
     setPicker(false)
     setReplyTo(null)
     setError(null)
@@ -129,7 +143,7 @@ export function Chat({ match, me, opponentName, messages, onClose }: Props) {
     const start = el?.selectionStart ?? text.length
     const end = el?.selectionEnd ?? text.length
     const next = (text.slice(0, start) + emoji + text.slice(end)).slice(0, MAX_CHAT_LENGTH)
-    setText(next)
+    edit(next)
     requestAnimationFrame(() => {
       el?.focus()
       el?.setSelectionRange(start + emoji.length, start + emoji.length)
@@ -182,6 +196,15 @@ export function Chat({ match, me, opponentName, messages, onClose }: Props) {
             </div>
           )
         })}
+        {opponentTyping && (
+          <div className="msg theirs" role="status" aria-label={`${opponentName} is typing`} title={`${opponentName} is typing`}>
+            <div className="bubble theirs typing" aria-hidden>
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        )}
       </div>
       {error && <div className="chat-error">{error}</div>}
       {picker && (
@@ -229,7 +252,7 @@ export function Chat({ match, me, opponentName, messages, onClose }: Props) {
           maxLength={MAX_CHAT_LENGTH}
           placeholder={replyTo ? 'Reply' : 'Message'}
           enterKeyHint="send"
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => edit(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Escape' && replyTo) {
               e.preventDefault()

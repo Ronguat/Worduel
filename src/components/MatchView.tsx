@@ -16,7 +16,7 @@ import {
   wantsAttention,
 } from '../game/logic'
 import { loadValidWords } from '../game/words'
-import { chatReadAt, useMessages } from '../game/chat'
+import { chatReadAt, useMessages, useOtherTyping } from '../game/chat'
 import { go, useMatch, useMediaQuery, useStoredState, useToast } from '../hooks'
 import { useNameOf } from '../profiles'
 import type { Match, Profile } from '../types'
@@ -134,6 +134,7 @@ function Game({
   const [chatOpen, setChatOpen] = useState(false)
   const messages = useMessages(match.id, chatEnabled)
   const lastMsg = messages[messages.length - 1]
+  const opponentTyping = useOtherTyping(match.id, me, chatEnabled, lastMsg)
   const unread = !wide && !chatOpen && !!lastMsg && lastMsg.by !== me && lastMsg.at > chatReadAt(match, me)
 
   // Remember what has been revealed so new guesses (including ones made while you were away) flip in.
@@ -464,7 +465,7 @@ function Game({
             {chatEnabled && !wide && (
               <button className="icon-btn badge-wrap" onClick={() => setChatOpen(true)} aria-label="Open chat">
                 💬
-                {unread && <span className="badge" />}
+                {opponentTyping ? <span className="badge typing" /> : unread && <span className="badge" />}
               </button>
             )}
             {menuItems.length > 0 && (
@@ -614,6 +615,7 @@ function Game({
         me={me}
         opponentName={nameOf(opp)}
         messages={messages}
+        opponentTyping={opponentTyping}
         onClose={wide ? undefined : () => setChatOpen(false)}
       />
     )}
